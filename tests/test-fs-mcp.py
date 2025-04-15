@@ -1,5 +1,5 @@
 import asyncio
-from freshservice_mcp.server import create_ticket,update_ticket,delete_ticket,get_ticket_by_id,list_service_items,get_requested_items,create_service_request,create_ticket_note,send_ticket_reply,list_all_ticket_conversation,update_ticket_conversation,get_all_products,get_products_by_id,create_product,update_product,create_requester,get_requester_id,update_requester,list_all_requester_fields,create_agent,get_agent,get_all_agents,update_agent,get_agent_fields,get_all_agent_groups,getAgentGroupById,create_group,update_requester_group,update_group,get_requester_groups_by_id,list_requester_group_members,create_requester_group,list_all_workspaces,get_workspace,get_all_canned_response,get_canned_response,list_all_canned_response_folder,get_all_solution_category,get_solution_category,create_solution_category,update_solution_category,get_list_of_solution_folder
+from freshservice_mcp.server import create_ticket,update_ticket,delete_ticket,get_ticket_by_id,list_service_items,get_requested_items,create_service_request,create_ticket_note,send_ticket_reply,list_all_ticket_conversation,update_ticket_conversation,get_all_products,get_products_by_id,create_product,update_product,create_requester,get_requester_id,update_requester,list_all_requester_fields,create_agent,get_agent,get_all_agents,update_agent,get_agent_fields,get_all_agent_groups,getAgentGroupById,create_group,update_requester_group,update_group,get_requester_groups_by_id,list_requester_group_members,create_requester_group,list_all_workspaces,get_workspace,get_all_canned_response,get_canned_response,list_all_canned_response_folder,get_all_solution_category,get_solution_category,create_solution_category,update_solution_category,get_list_of_solution_folder,create_solution_folder,update_solution_folder,create_solution_article,update_solution_article,get_list_of_solution_article,get_solution_article
 
 async def test_create_ticket():
     payload = {
@@ -252,7 +252,64 @@ async def test_get_list_of_solution_folder():
     id = 27000124578
     result = await get_list_of_solution_folder(id=id)
     print(result)
-    
+
+async def test_create_solution_folder():
+    name="433 Tactics"
+    category_id = 27000124578
+    department_ids = [27001017280]
+    result = await create_solution_folder(name=name,category_id=category_id,department_ids=department_ids)
+    print(result)
+    #27000183948
+
+async def test_update_solution_folder():
+    id = 27000183948
+    name = "GengenPress Tactics"
+    result = await update_solution_folder(id=id,name=name)
+    print(result)
+
+async def test_create_solution_article():
+    title = "GengenPress Football Tactics"
+    description = """
+        <p>The GengenPress is a high-intensity football tactic where a team immediately presses the ball after losing possession, aiming to win it back quickly.</p>
+        <p>This article covers the key principles, advantages, and how to train your squad to master this approach.</p>
+    """
+    folder_id = 27000183948 
+    article_type = 1         # Permanent
+    status = 2               # Published
+    tags = ["football", "tactics", "pressing", "gengenpress"]
+    keywords = ["gengenpress", "football tactics", "high press"]
+    review_date = "2025-12-01"
+
+    result = await create_solution_article(
+        title=title,
+        description=description,
+        folder_id=folder_id,
+        article_type=article_type,
+        status=status,
+        tags=tags,
+        keywords=keywords,
+        review_date=review_date
+    )
+    # id 27000093242
+    print(result)
+
+async def test_update_solution_article():
+    id = 27000093242
+    title = "GengenPress Football Tactics - A complete guide"
+    result = await update_solution_article(article_id=id,title=title)
+    print (result)
+
+async def test_get_list_of_solution_article():
+    id= 27000183948
+    result = await get_list_of_solution_article(id=id)
+    print(result)
+
+async def test_get_solution_article():
+    id = 27000093242
+    result = await get_solution_article(id=id)
+    print(result)
+
+
 if __name__ == "__main__":
     # asyncio.run(test_create_ticket())
     # asyncio.run(test_update_ticket())
@@ -294,5 +351,10 @@ if __name__ == "__main__":
     # asyncio.run(test_get_all_solution_category())
     # asyncio.run(test_create_solution_category())
     # asyncio.run(test_update_solution_category())
-    asyncio.run(test_get_list_of_solution_folder())
-    
+    # asyncio.run(test_get_list_of_solution_folder())
+    # asyncio.run(test_create_solution_folder())
+    # asyncio.run(test_update_solution_folder())
+    # asyncio.run(test_create_solution_article())
+    # asyncio.run(test_update_solution_article()) 
+    # asyncio.run(test_get_list_of_solution_article())
+    asyncio.run(test_get_solution_article())
