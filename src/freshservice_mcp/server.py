@@ -256,7 +256,7 @@ async def create_ticket(
                 return "Ticket created successfully"
             
             response_data = response.json()
-            return f"Success: {response_data}"
+            return f"Success: {response_data}" #FIXME This is redundant can you move it along with the previous return?
             
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 400:
@@ -364,7 +364,7 @@ async def delete_ticket(ticket_id: int) -> str:
 
     async with httpx.AsyncClient() as client:
         response = await client.delete(url, headers=headers)
-        return response.json()
+        return response.json() #FIXME Check The response for existence 
     
 # GET TICKET BY ID  
 @mcp.tool()
@@ -380,7 +380,7 @@ async def get_ticket_by_id(ticket_id:int) -> str:
 @mcp.tool()
 async def list_service_items() -> dict:
     """Fetch all service catalog items to get their display_id."""
-    url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/service_catalog/items"
+    url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/service_catalog/items" #FIXME this is a paginated API iterate until empty response or add page parameters
     headers = get_auth_headers()
 
     async with httpx.AsyncClient() as client:
@@ -505,6 +505,7 @@ async def create_service_request(
 
 #CREATE CONVERSATION
 @mcp.tool()
+# FIXME this function is useless
 async def create_conversation(ticket_id:int) -> str:
     """Create a note in the ticket"""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/tickets/{ticket_id}/notes"
@@ -516,6 +517,7 @@ async def create_conversation(ticket_id:int) -> str:
     
 #CREATE A REPLY
 @mcp.tool()
+#FIXME are attachments required? & add optional fields as optional
 async def send_ticket_reply(ticket_id: int, body: str, from_email: str = None, user_id: int = None, cc_emails: list = [], bcc_emails: list = [], attachments: list = []) -> dict:
     """Send a reply to a ticket in Freshservice."""
     
@@ -591,6 +593,7 @@ async def list_all_ticket_conversation(ticket_id: int)-> Dict[str, Any]:
 #PRODUCTS 
 #GET ALL PRODUCTS
 @mcp.tool()
+#FIXME this is a paginated endpoint iterate or add page as params
 async def get_all_products()-> Dict[str, Any]:
     """List all products of a ticket in freshservice"""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/products"
@@ -809,7 +812,7 @@ async def create_requester(
     headers = get_auth_headers()
 
     payload: Dict[str, Any] = {
-        "first_name": first_name
+        "first_name": first_name #FIXME perform type check here or explicitly convert to string
     }
 
     # Add optional fields only if they are provided
@@ -851,6 +854,7 @@ async def create_requester(
             
 #Get all requester
 @mcp.tool()
+#FIXME add pagination support
 async def get_all_requesters()-> Dict[str, Any]:
     """List all requester in Freshservice"""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/requesters"
@@ -1037,7 +1041,7 @@ async def get_agent(agent_id:int)-> Dict[str, Any]:
 @mcp.tool()
 async def get_all_agents()-> Dict[str, Any]:
     """Get all agents Freshservice"""
-    url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/agents"
+    url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/agents" #FIXME this is a paginated endpoint
     headers = get_auth_headers()
    
     async with httpx.AsyncClient() as client:
@@ -1157,7 +1161,7 @@ async def getAgentGroupById(group_id:int)-> Dict[str, Any]:
         
 #Create group
 @mcp.tool()
-async def create_group(group_fields: GroupCreate) -> Dict[str, Any]:
+async def create_group(group_fields: GroupCreate) -> Dict[str, Any]:#FIXME group_fields should be dict right?
     """Create a group in Freshdesk using validated input."""
     try:
         group_data = group_fields.model_dump(exclude_none=True)
@@ -1199,7 +1203,7 @@ async def update_group(group_id: int, group_fields: Dict[str, Any]) -> Dict[str,
                 "details": e.response.json() if e.response else None}
             
 @mcp.tool()
-async def get_all_requester_groups()-> Dict[str, Any]:
+async def get_all_requester_groups()-> Dict[str, Any]:#FIXME add pagination
     """Get all requester groups in freshservice"""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/requester_groups"
     headers = get_auth_headers()
@@ -1340,6 +1344,7 @@ async def get_all_canned_response() -> Dict[str, Any]:
             }
             
 @mcp.tool()
+# FIXME getting 403 error -> add this in the readme in future 
 async def get_canned_response(
     id: int
 ) -> Dict[str, Any]:
