@@ -1748,7 +1748,7 @@ async def create_solution_folder(
     category_id: int,
     visibility: int = 4,
     description: Optional[str] = None,
-    department_ids: Optional[List[int]] = None
+    department_ids: Optional[List[int]] = None #FIXME not optional
 ) -> Dict[str, Any]:
     """Create a new folder under a solution category in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/solutions/folders"
