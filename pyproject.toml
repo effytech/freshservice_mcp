@@ -1,0 +1,12 @@
+[project]
+name = "freshservice-mcp"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "build>=1.2.2.post1",
+    "httpx==0.28.1",
+    "mcp[cli]>=1.3.0",
+    "pydantic>=2.10.6",
+]
