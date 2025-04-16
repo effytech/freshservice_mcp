@@ -1110,17 +1110,6 @@ async def filter_requesters(query: str,include_agents: bool = False) -> Dict[str
     headers = get_auth_headers()
 
     async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(url, headers=headers)
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPStatusError as e:
-            try:
-                return {"error": str(e), "details": e.response.json()}
-            except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
-
-    async with httpx.AsyncClient() as client:
         response = await client.get(url, headers=headers)
         if response.status_code == 200:
             return response.json()
@@ -1130,7 +1119,6 @@ async def filter_requesters(query: str,include_agents: bool = False) -> Dict[str
                 "details": response.text
             }
 
-            
             
 #Agents
 #CREATE AN AGENT
@@ -1223,9 +1211,17 @@ async def get_all_agents(page: int = 1, per_page: int = 30) -> Dict[str, Any]:
                 }
             }
         except httpx.HTTPStatusError as e:
-            return {"success": False, "error": f"HTTP error: {str(e)}"}
-        except Exception as e:
-            return {"success": False, "error": f"Unexpected error: {str(e)}"}
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
+            return {
+                "error": f"Failed to create solution folder: {str(e)}",
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
+            }
             
 #FILTER AGENTS
 @mcp.tool()
@@ -1362,9 +1358,16 @@ async def add_requester_to_group(
             return {"success": f"Requester {requester_id} added to group {group_id}."}
 
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
-                "error": f"Failed to add requester: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "error": f"Failed to add requester to group: {str(e)}",
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
             }
         
 #CREATE GROUP
@@ -1393,13 +1396,19 @@ async def create_group(group_data: Dict[str, Any]) -> Dict[str, Any]:
             response = await client.post(url, headers=headers, json=group_data)
             response.raise_for_status()
             return response.json()
+        
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
                 "error": f"Failed to create group: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
             }
-        except Exception as e:
-            return {"error": f"Unexpected error: {str(e)}"}
         
 #UPDATE GROUP
 @mcp.tool()
@@ -1417,10 +1426,19 @@ async def update_group(group_id: int, group_fields: Dict[str, Any]) -> Dict[str,
             response = await client.put(url, headers=headers, json=group_data)
             response.raise_for_status()
             return response.json()
+        
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
                 "error": f"Failed to update group: {str(e)}",
-                "details": e.response.json() if e.response else None}
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
+            }
             
 #GET ALL REQUETER GROUPS 
 @mcp.tool()
@@ -1463,7 +1481,7 @@ async def get_all_requester_groups(page: Optional[int] = 1, per_page: Optional[i
             }
 
         except httpx.HTTPStatusError as e:
-            return {"error": f"Failed to fetch requester groups: {str(e)}"}
+            return {"error": f"Failed to fetch all requester groups: {str(e)}"}
         except Exception as e:
             return {"error": f"An unexpected error occurred: {str(e)}"}
         
@@ -1502,10 +1520,23 @@ async def create_requester_group(
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
                 "error": f"Failed to create requester group: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
             }
+
+        except Exception as e:
+            return {
+                "error": f"Unexpected error occurred: {str(e)}"
+            }
+            
 #UPDATE REQUESTER GROUP
 @mcp.tool()
 async def update_requester_group(id: int,name: Optional[str] = None,description: Optional[str] = None) -> Dict[str, Any]:
@@ -1528,9 +1559,16 @@ async def update_requester_group(id: int,name: Optional[str] = None,description:
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
                 "error": f"Failed to update requester group: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
             }
             
 #GET LIST OF REQUESTER GROUP MEMBERS
@@ -1550,9 +1588,21 @@ async def list_requester_group_members(
             return response.json()
 
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
-                "error": f"Failed to list members: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "error": f"Failed to fetch list of requester group memebers: {str(e)}",
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
+            }
+
+        except Exception as e:
+            return {
+                "error": f"Unexpected error occurred: {str(e)}"
             }
             
 #GET ALL CANNED RESPONSES
@@ -1571,9 +1621,21 @@ async def get_all_canned_response() -> Dict[str, Any]:
             return response.json()
 
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
-                "error": f"Failed to list members: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "error": f"Failed to get all canned response folder: {str(e)}",
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
+            }
+
+        except Exception as e:
+            return {
+                "error": f"Unexpected error occurred: {str(e)}"
             }
 
 #GET CANNED RESPONSE BY ID
@@ -1625,9 +1687,21 @@ async def list_all_canned_response_folder() -> Dict[str, Any]:
             return response.json()
 
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
-                "error": f"Failed to list members: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "error": f"Failed to list all canned response folder: {str(e)}",
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
+            }
+
+        except Exception as e:
+            return {
+                "error": f"Unexpected error occurred: {str(e)}"
             }
             
 #LIST CANNED RESPONSE FOLDER
@@ -1647,9 +1721,21 @@ async def list_canned_response_folder(
             return response.json()
 
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
-                "error": f"Failed to list members: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "error": f"Failed to list canned response folder: {str(e)}",
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
+            }
+
+        except Exception as e:
+            return {
+                "error": f"Unexpected error occurred: {str(e)}"
             }
             
 #GET ALL WORKSPACES
@@ -1667,9 +1753,21 @@ async def list_all_workspaces() -> Dict[str, Any]:
             return response.json()
 
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
-                "error": f"Failed to list members: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "error": f"Failed to fetch list of solution workspaces: {str(e)}",
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
+            }
+
+        except Exception as e:
+            return {
+                "error": f"Unexpected error occurred: {str(e)}"
             }
 
 #GET WORKSPACE
@@ -1687,9 +1785,21 @@ async def get_workspace(id: int) -> Dict[str, Any]:
             return response.json()
 
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
-                "error": f"Failed to list members: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "error": f"Failed to fetch workspace: {str(e)}",
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
+            }
+
+        except Exception as e:
+            return {
+                "error": f"Unexpected error occurred: {str(e)}"
             }
             
 #GET ALL SOLUTION CATEGORY
@@ -1707,9 +1817,21 @@ async def get_all_solution_category() -> Dict[str, Any]:
             return response.json()
 
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
-                "error": f"Failed to list members: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "error": f"Failed to get all solution category: {str(e)}",
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
+            }
+
+        except Exception as e:
+            return {
+                "error": f"Unexpected error occurred: {str(e)}"
             }
             
 #GET SOLUTION CATEGORY
@@ -1727,9 +1849,21 @@ async def get_solution_category(id: int) -> Dict[str, Any]:
             return response.json()
 
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
-                "error": f"Failed to list members: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "error": f"Failed to get solution category: {str(e)}",
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
+            }
+
+        except Exception as e:
+            return {
+                "error": f"Unexpected error occurred: {str(e)}"
             }
             
 #CREATE SOLUTION CATEGORY
@@ -1758,9 +1892,21 @@ async def create_solution_category(
 
             return response.json() 
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
                 "error": f"Failed to create solution category: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
+            }
+
+        except Exception as e:
+            return {
+                "error": f"Unexpected error occurred: {str(e)}"
             }
             
 #UPDATE SOLUTION CATEGORY
@@ -1794,9 +1940,21 @@ async def update_solution_category(
 
             return response.json()  
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
                 "error": f"Failed to update solution category: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
+            }
+
+        except Exception as e:
+            return {
+                "error": f"Unexpected error occurred: {str(e)}"
             }
 
 #GET LIST OF SOLUTION FOLDER
@@ -1814,14 +1972,26 @@ async def get_list_of_solution_folder(id:int) -> Dict[str, Any]:
             return response.json()
 
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
-                "error": f"Failed to list members: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "error": f"Failed to fetch list of solution folder: {str(e)}",
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
+            }
+
+        except Exception as e:
+            return {
+                "error": f"Unexpected error occurred: {str(e)}"
             }
             
 #GET SOLUTION FOLDER
 @mcp.tool()
-async def get_solution_folder(id:int) -> Dict[str, Any]:
+async def get_solution_folder(id: int) -> Dict[str, Any]:
     """Get solution folder by its ID in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/solutions/folders/{id}"
     headers = get_auth_headers()
@@ -1834,11 +2004,23 @@ async def get_solution_folder(id:int) -> Dict[str, Any]:
             return response.json()
 
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
-                "error": f"Failed to list members: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "error": f"Failed to fetch solution folder: {str(e)}",
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
             }
 
+        except Exception as e:
+            return {
+                "error": f"Unexpected error occurred: {str(e)}"
+            }
+            
 #GET LIST OF SOLUTION ARTICLE
 @mcp.tool()
 async def get_list_of_solution_article(id:int) -> Dict[str, Any]:
@@ -1854,9 +2036,21 @@ async def get_list_of_solution_article(id:int) -> Dict[str, Any]:
             return response.json()
 
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
-                "error": f"Failed to list members: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "error": f"Failed to fetch list of solution folder: {str(e)}",
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
+            }
+
+        except Exception as e:
+            return {
+                "error": f"Unexpected error occurred: {str(e)}"
             }
             
 #GET SOLUTION ARTICLE
@@ -1873,9 +2067,21 @@ async def get_solution_article(id:int) -> Dict[str, Any]:
             return response.json()
 
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
-                "error": f"Failed to list members: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "error": f"Failed to fetch solution article: {str(e)}",
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
+            }
+
+        except Exception as e:
+            return {
+                "error": f"Unexpected error occurred: {str(e)}"
             }
 
 #CREATE SOLUTION ARTICLE
@@ -1913,9 +2119,21 @@ async def create_solution_article(
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
                 "error": f"Failed to create solution article: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
+            }
+
+        except Exception as e:
+            return {
+                "error": f"Unexpected error occurred: {str(e)}"
             }
             
 #UPDATE SOLUTION ARTICLE
@@ -1954,9 +2172,21 @@ async def update_solution_article(
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
                 "error": f"Failed to update solution article: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
+            }
+
+        except Exception as e:
+            return {
+                "error": f"Unexpected error occurred: {str(e)}"
             }
             
 #CREATE SOLUTION FOLDER
@@ -1992,12 +2222,22 @@ async def create_solution_folder(
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
                 "error": f"Failed to create solution folder: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
             }
+
         except Exception as e:
-            return {"error": f"Unexpected error: {str(e)}"}
+            return {
+                "error": f"Unexpected error occurred: {str(e)}"
+            }
 
 
 #UPDATE SOLUTION FOLDER
@@ -2025,10 +2265,23 @@ async def update_solution_folder(
             response = await client.put(url, headers=headers, json=payload)
             response.raise_for_status()
             return response.json()
+        
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
                 "error": f"Failed to update solution folder: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
+            }
+
+        except Exception as e:
+            return {
+                "error": f"Unexpected error occurred: {str(e)}"
             }
                     
 #PUBLISH SOLUTION ARTICLE   
@@ -2046,9 +2299,21 @@ async def publish_solution_article(article_id: int) -> Dict[str, Any]:
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as e:
+            error_text = None
+            try:
+                error_text = e.response.json() if e.response else None
+            except Exception:
+                error_text = e.response.text if e.response else None
+
             return {
                 "error": f"Failed to publish solution article: {str(e)}",
-                "details": e.response.json() if e.response else None
+                "status_code": e.response.status_code if e.response else None,
+                "details": error_text
+            }
+
+        except Exception as e:
+            return {
+                "error": f"Unexpected error occurred: {str(e)}"
             }
 
 # GET DEFAULT AUTH HEADERS
