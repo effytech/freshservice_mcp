@@ -1,5 +1,5 @@
 import asyncio
-from freshservice_mcp.server import create_ticket,update_ticket,delete_ticket,get_ticket_by_id,list_service_items,get_requested_items,create_service_request,create_ticket_note,send_ticket_reply,list_all_ticket_conversation,update_ticket_conversation,get_all_products,get_products_by_id,create_product,update_product,create_requester,get_requester_id,update_requester,list_all_requester_fields,create_agent,get_agent,get_all_agents,update_agent,get_agent_fields,get_all_agent_groups,getAgentGroupById,create_group,update_requester_group,update_group,get_requester_groups_by_id,list_requester_group_members,create_requester_group,list_all_workspaces,get_workspace,get_all_canned_response,get_canned_response,list_all_canned_response_folder,get_all_solution_category,get_solution_category,create_solution_category,update_solution_category,get_list_of_solution_folder,create_solution_folder,update_solution_folder,create_solution_article,update_solution_article,get_list_of_solution_article,get_solution_article
+from freshservice_mcp.server import add_requester_to_group, create_ticket, filter_agents, filter_requesters, filter_tickets, publish_solution_article,update_ticket,delete_ticket,get_ticket_by_id,list_service_items,get_requested_items,create_service_request,create_ticket_note,send_ticket_reply,list_all_ticket_conversation,update_ticket_conversation,get_all_products,get_products_by_id,create_product,update_product,create_requester,get_requester_id,update_requester,list_all_requester_fields,create_agent,get_agent,get_all_agents,update_agent,get_agent_fields,get_all_agent_groups,getAgentGroupById,create_group,update_requester_group,update_group,get_requester_groups_by_id,list_requester_group_members,create_requester_group,list_all_workspaces,get_workspace,get_all_canned_response,get_canned_response,list_all_canned_response_folder,get_all_solution_category,get_solution_category,create_solution_category,update_solution_category,get_list_of_solution_folder,create_solution_folder,update_solution_folder,create_solution_article,update_solution_article,get_list_of_solution_article,get_solution_article
 
 async def test_create_ticket():
     payload = {
@@ -309,6 +309,44 @@ async def test_get_solution_article():
     result = await get_solution_article(id=id)
     print(result)
 
+async def test_filter_tickets():
+    query = "priority:'2'" 
+
+    result = await filter_tickets(query)
+    print(result)
+
+async def test_filter_requesters():
+    query = "primary_email:'vijay.r@effy.co.in'"  
+    include_agents = True  
+
+    result = await filter_requesters(query, include_agents)
+
+    assert 'requesters' in result
+    assert isinstance(result['requesters'], list)
+    
+    if result['requesters']:  
+        assert 'id' in result['requesters'][0]
+        assert 'name' in result['requesters'][0]
+        assert 'email' in result['requesters'][0]
+    else:
+        print("No requesters found matching the query")
+        
+async def test_filter_agents():
+    query = "department_id:123 AND created_at:>'2024-01-01'"
+    agents = await filter_agents(query)
+    print(agents)
+
+async def test_add_requester_to_group():
+    group_id = 27000229326  
+    requester_id = 27005854063  
+
+    result = await add_requester_to_group(group_id, requester_id)
+    print(result)
+
+async def test_publish_solution_article():
+    article_id = 27000093264 
+    result = await publish_solution_article(article_id)
+    print(result)
 
 if __name__ == "__main__":
     # asyncio.run(test_create_ticket())
@@ -357,4 +395,12 @@ if __name__ == "__main__":
     # asyncio.run(test_create_solution_article())
     # asyncio.run(test_update_solution_article()) 
     # asyncio.run(test_get_list_of_solution_article())
-    asyncio.run(test_get_solution_article())
+    # asyncio.run(test_get_solution_article())
+    # asyncio.run(test_filter_tickets())
+    # asyncio.run(test_filter_requesters())
+    # asyncio.run(test_filter_agents())
+    asyncio.run(test_publish_solution_article())
+    # asyncio.run(test_add_requester_to_group())
+    
+    
+    
