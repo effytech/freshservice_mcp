@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/effytech-freshservice-mcp-badge.png)](https://mseep.ai/app/effytech-freshservice-mcp)
+
 # Freshservice MCP Server
 
 [![smithery badge](https://smithery.ai/badge/@effytech/freshservice_mcp)](https://smithery.ai/server/@effytech/freshservice_mcp)
