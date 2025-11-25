@@ -388,7 +388,7 @@ async def delete_ticket(ticket_id: int) -> str:
     
 #GET TICKET BY ID  
 @mcp.tool()
-async def get_ticket_by_id(ticket_id:int) -> str:
+async def get_ticket_by_id(ticket_id:int) -> Dict[str, Any]:
     """Get a ticket in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/tickets/{ticket_id}"
     headers = get_auth_headers()
