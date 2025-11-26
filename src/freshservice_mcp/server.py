@@ -2166,10 +2166,12 @@ async def filter_agents(query: str) -> List[Dict[str, Any]]:
     headers = get_auth_headers()
     all_agents = []
     page = 1
+    # Freshservice API requires the query to be wrapped in double quotes
+    encoded_query = urllib.parse.quote(f'"{query}"')
 
     async with httpx.AsyncClient() as client:
         while True:
-            url = f"{base_url}?query={query}&page={page}"
+            url = f"{base_url}?query={encoded_query}&page={page}"
             response = await client.get(url, headers=headers)
             response.raise_for_status()
 
