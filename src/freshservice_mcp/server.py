@@ -337,15 +337,16 @@ async def update_ticket(ticket_id: int, ticket_fields: Dict[str, Any]) -> Dict[s
 @mcp.tool()
 async def filter_tickets(query: str, page: int = 1, workspace_id: Optional[int] = None) -> Dict[str, Any]:
     """Filter the tickets in Freshservice.
-    
+
     Args:
         query: Filter query string (e.g., "status:2 AND priority:1")
                Note: Some Freshservice endpoints may require queries to be wrapped in double quotes.
                If you get 500 errors, try wrapping your query in double quotes: "your_query_here"
-        page: Page number (default: 1)  
+        page: Page number (default: 1)
         workspace_id: Optional workspace ID filter
     """
-    encoded_query = urllib.parse.quote(query)
+    # Freshservice API requires the query to be wrapped in double quotes
+    encoded_query = urllib.parse.quote(f'"{query}"')
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/tickets/filter?query={encoded_query}&page={page}"
     
     if workspace_id is not None:
