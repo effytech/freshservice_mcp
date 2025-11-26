@@ -310,8 +310,9 @@ async def test_get_solution_article():
     print(result)
 
 async def test_filter_tickets():
-    query = '"priority:3"'   
-    result = await filter_tickets(query) 
+    # Quotes are now automatically added by the function
+    query = "priority:3"
+    result = await filter_tickets(query)
     print(result)
 
 async def test_filter_requesters():
@@ -322,7 +323,9 @@ async def test_filter_requesters():
     print(result)
         
 async def test_filter_agents():
-    query = "department_id:123 AND created_at:>'2024-01-01'"
+    # Quotes are now automatically added by the function
+    # Note: use valid filter fields like first_name, email, etc.
+    query = "first_name:John"
     agents = await filter_agents(query)
     print(agents)
 
