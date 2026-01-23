@@ -21,6 +21,7 @@ A powerful MCP (Model Context Protocol) server implementation that seamlessly in
 -  Changes
 -  Conversations
 -  Products
+-  Assets
 -  Requesters
 -  Agents
 -  Agent Groups
@@ -47,6 +48,14 @@ The server provides a comprehensive toolkit for Freshservice operations:
 | `get_ticket_fields` | Retrieve ticket field definitions | None |
 | `get_tickets` | List all tickets with pagination | `page`, `per_page` |
 | `get_ticket_by_id` | Retrieve single ticket details | `ticket_id` |
+
+### Asset Management
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `get_all_assets` | List all assets with pagination | `page`, `per_page` |
+| `get_asset_by_id` | Retrieve single asset details | `asset_id` |
+| `filter_assets` | Find assets matching criteria | `query`, `page`, `per_page` |
 
 ### Change Management
 
