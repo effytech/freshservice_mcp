@@ -137,6 +137,7 @@ npx -y @smithery/cli install @effytech/freshservice_mcp --client claude
 - A Freshservice account (sign up at [freshservice.com](https://www.freshservice.com))
 - Freshservice API key
 - `uvx` installed (`pip install uv` or `brew install uv`)
+- `python-dotenv` available if you want to load environment variables from a `.env` file
 
 ### Configuration
 
