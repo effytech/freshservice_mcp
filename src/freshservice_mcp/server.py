@@ -108,6 +108,12 @@ class AssetFilter(BaseModel):
     query: str = Field(..., description="Filter query string (e.g., asset_tag:'LT-2023-087')")
     page: Optional[int] = Field(default=1, description="Page number for pagination (default is 1)")
     per_page: Optional[int] = Field(default=30, description="Number of items per page (1-100, default: 30)")
+
+
+class ProductStatus(IntEnum):
+    IN_PRODUCTION = 1
+    IN_PIPELINE = 2
+    RETIRED = 3
     
 class AgentInput(BaseModel):
     first_name: str = Field(..., description="First name of the agent")
@@ -1688,7 +1694,7 @@ async def create_product(
     name: str,
     asset_type_id: int,
     manufacturer: Optional[str] = None,
-    status: Optional[Union[str, int]] = None,
+    status: Optional[Union[str, int, ProductStatus]] = None,
     mode_of_procurement: Optional[str] = None,
     depreciation_type_id: Optional[int] = None,
     description: Optional[str] = None,
@@ -1701,6 +1707,9 @@ async def create_product(
         "In Production": "In Production",
         "In Pipeline": "In Pipeline",
         "Retired": "Retired",
+        ProductStatus.IN_PRODUCTION: "In Production",
+        ProductStatus.IN_PIPELINE: "In Pipeline",
+        ProductStatus.RETIRED: "Retired",
         1: "In Production",
         2: "In Pipeline",
         3: "Retired"
@@ -1764,7 +1773,7 @@ async def update_product(
     name: str,
     asset_type_id: int,
     manufacturer: Optional[str] = None,
-    status: Optional[Union[str, int]] = None,
+    status: Optional[Union[str, int, ProductStatus]] = None,
     mode_of_procurement: Optional[str] = None,
     depreciation_type_id: Optional[int] = None,
     description: Optional[str] = None,
@@ -1776,6 +1785,9 @@ async def update_product(
         "In Production": "In Production",
         "In Pipeline": "In Pipeline",
         "Retired": "Retired",
+        ProductStatus.IN_PRODUCTION: "In Production",
+        ProductStatus.IN_PIPELINE: "In Pipeline",
+        ProductStatus.RETIRED: "Retired",
         1: "In Production",
         2: "In Pipeline",
         3: "Retired"
@@ -1868,7 +1880,10 @@ async def get_all_assets(page: Optional[int] = 1, per_page: Optional[int] = 30) 
                 }
             }
         except httpx.HTTPStatusError as e:
-            return {"success": False, "error": f"HTTP error occurred: {str(e)}"}
+            try:
+                return {"success": False, "error": str(e), "details": e.response.json()}
+            except Exception:
+                return {"success": False, "error": str(e), "raw_response": e.response.text}
         except Exception as e:
             return {"success": False, "error": f"Unexpected error occurred: {str(e)}"}
 
@@ -1883,34 +1898,46 @@ async def get_asset_by_id(asset_id: int) -> Dict[str, Any]:
         try:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
-            return response.json()
+            return {"success": True, "data": response.json()}
         except httpx.HTTPStatusError as e:
-            return {"success": False, "error": f"HTTP error occurred: {str(e)}"}
+            try:
+                return {
+                    "success": False,
+                    "status_code": e.response.status_code,
+                    "error": str(e),
+                    "details": e.response.json()
+                }
+            except Exception:
+                return {
+                    "success": False,
+                    "status_code": e.response.status_code,
+                    "error": str(e),
+                    "raw_response": e.response.text
+                }
         except Exception as e:
             return {"success": False, "error": f"Unexpected error occurred: {str(e)}"}
 
 #FILTER ASSETS
 @mcp.tool()
-async def filter_assets(query: str, page: int = 1, per_page: int = 30) -> Dict[str, Any]:
+async def filter_assets(filters: AssetFilter) -> Dict[str, Any]:
     """Filter assets in Freshservice.
 
     Args:
-        query: Filter query string (e.g., "asset_tag:'LT-2023-087'")
-               Query must be wrapped in double quotes for filtering to work.
-        page: Page number (default: 1)
-        per_page: Number of items per page (1-100, default: 30)
+        filters: Filter schema containing query, page, and per_page.
     """
-    if page < 1:
+    if filters.page < 1:
         return {"success": False, "error": "Page number must be greater than 0"}
-    if per_page < 1 or per_page > 100:
+    if filters.per_page < 1 or filters.per_page > 100:
         return {"success": False, "error": "Page size must be between 1 and 100"}
 
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/assets"
     headers = get_auth_headers()
+    query = filters.query
+    quoted_query = query if (query.startswith('"') and query.endswith('"')) else f'"{query}"'
     params = {
-        "query": f'"{query}"',
-        "page": page,
-        "per_page": per_page
+        "query": quoted_query,
+        "page": filters.page,
+        "per_page": filters.per_page
     }
 
     async with httpx.AsyncClient() as client:
@@ -1929,10 +1956,10 @@ async def filter_assets(query: str, page: int = 1, per_page: int = 30) -> Dict[s
                 "success": True,
                 "assets": assets,
                 "pagination": {
-                    "current_page": page,
+                    "current_page": filters.page,
                     "next_page": next_page,
                     "has_next": bool(next_page),
-                    "per_page": per_page
+                    "per_page": filters.per_page
                 }
             }
         except httpx.HTTPStatusError as e:
