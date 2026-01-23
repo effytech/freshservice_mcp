@@ -1919,6 +1919,10 @@ async def get_all_assets(page: Optional[int] = 1, per_page: Optional[int] = 30) 
             }
         except httpx.HTTPStatusError as e:
             return build_http_error(e, "Failed to list assets")
+            try:
+                return {"success": False, "error": str(e), "details": e.response.json()}
+            except Exception:
+                return {"success": False, "error": str(e), "raw_response": e.response.text}
         except Exception as e:
             return {"success": False, "error": f"Unexpected error occurred: {str(e)}"}
 
@@ -1936,6 +1940,20 @@ async def get_asset_by_id(asset_id: int) -> Dict[str, Any]:
             return {"success": True, "data": response.json()}
         except httpx.HTTPStatusError as e:
             return build_http_error(e, "Failed to fetch asset")
+            try:
+                return {
+                    "success": False,
+                    "status_code": e.response.status_code,
+                    "error": str(e),
+                    "details": e.response.json()
+                }
+            except Exception:
+                return {
+                    "success": False,
+                    "status_code": e.response.status_code,
+                    "error": str(e),
+                    "raw_response": e.response.text
+                }
         except Exception as e:
             return {"success": False, "error": f"Unexpected error occurred: {str(e)}"}
 
@@ -2021,7 +2039,7 @@ async def list_asset_types(page: Optional[int] = 1, per_page: Optional[int] = 30
                     "current_page": page,
                     "next_page": next_page,
                     "has_next": bool(next_page),
-                    "per_page": per_page
+                    "per_page": filters.per_page
                 }
             }
         except httpx.HTTPStatusError as e:

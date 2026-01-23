@@ -78,6 +78,22 @@ The server provides a comprehensive toolkit for Freshservice operations:
 - Numeric values: `1` (In Production), `2` (In Pipeline), `3` (Retired)
 - Enum values: `ProductStatus.IN_PRODUCTION`, `ProductStatus.IN_PIPELINE`, `ProductStatus.RETIRED`
 
+**Asset filtering notes:**
+- `filter_assets` accepts the `AssetFilter` schema and will auto-quote the `query` value if you don't include surrounding double quotes.
+- You can still pass a pre-quoted query string if you prefer explicit control over the filter syntax.
+
+### Product Management
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `create_product` | Create a new product | `name`, `asset_type_id`, `status`, `manufacturer` |
+| `update_product` | Update an existing product | `id`, `name`, `asset_type_id`, `status`, `manufacturer` |
+
+**Product status options:**
+- String values: `"In Production"`, `"In Pipeline"`, `"Retired"`
+- Numeric values: `1` (In Production), `2` (In Pipeline), `3` (Retired)
+- Enum values: `ProductStatus.IN_PRODUCTION`, `ProductStatus.IN_PIPELINE`, `ProductStatus.RETIRED`
+
 ### Change Management
 
 | Tool | Description | Key Parameters |
