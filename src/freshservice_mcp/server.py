@@ -103,6 +103,11 @@ class FilterRequestersSchema(BaseModel):
     custom_fields: Optional[Dict[str, str]] = Field(default=None, description="Custom fields to filter (key-value pairs)")
     include_agents: Optional[bool] = Field(default=False, description="Include agents in the response")
     page: Optional[int] = Field(default=1, description="Page number for pagination (default is 1)")
+
+class AssetFilter(BaseModel):
+    query: str = Field(..., description="Filter query string (e.g., asset_tag:'LT-2023-087')")
+    page: Optional[int] = Field(default=1, description="Page number for pagination (default is 1)")
+    per_page: Optional[int] = Field(default=30, description="Number of items per page (1-100, default: 30)")
     
 class AgentInput(BaseModel):
     first_name: str = Field(..., description="First name of the agent")
@@ -1826,6 +1831,117 @@ async def update_product(
                 "success": False,
                 "error": f"Unexpected error occurred: {err}"
             }
+
+#GET ALL ASSETS
+@mcp.tool()
+async def get_all_assets(page: Optional[int] = 1, per_page: Optional[int] = 30) -> Dict[str, Any]:
+    """List all assets from Freshservice."""
+    if page < 1:
+        return {"success": False, "error": "Page number must be greater than 0"}
+    if per_page < 1 or per_page > 100:
+        return {"success": False, "error": "Page size must be between 1 and 100"}
+
+    url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/assets"
+    headers = get_auth_headers()
+    params = {"page": page, "per_page": per_page}
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+
+            data = response.json()
+            assets = data.get("assets", [])
+
+            link_header = response.headers.get("Link", "")
+            pagination_info = parse_link_header(link_header)
+            next_page = pagination_info.get("next")
+
+            return {
+                "success": True,
+                "assets": assets,
+                "pagination": {
+                    "current_page": page,
+                    "next_page": next_page,
+                    "has_next": bool(next_page),
+                    "per_page": per_page
+                }
+            }
+        except httpx.HTTPStatusError as e:
+            return {"success": False, "error": f"HTTP error occurred: {str(e)}"}
+        except Exception as e:
+            return {"success": False, "error": f"Unexpected error occurred: {str(e)}"}
+
+#GET ASSET BY ID
+@mcp.tool()
+async def get_asset_by_id(asset_id: int) -> Dict[str, Any]:
+    """Get asset by ID in Freshservice."""
+    url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/assets/{asset_id}"
+    headers = get_auth_headers()
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            return {"success": False, "error": f"HTTP error occurred: {str(e)}"}
+        except Exception as e:
+            return {"success": False, "error": f"Unexpected error occurred: {str(e)}"}
+
+#FILTER ASSETS
+@mcp.tool()
+async def filter_assets(query: str, page: int = 1, per_page: int = 30) -> Dict[str, Any]:
+    """Filter assets in Freshservice.
+
+    Args:
+        query: Filter query string (e.g., "asset_tag:'LT-2023-087'")
+               Query must be wrapped in double quotes for filtering to work.
+        page: Page number (default: 1)
+        per_page: Number of items per page (1-100, default: 30)
+    """
+    if page < 1:
+        return {"success": False, "error": "Page number must be greater than 0"}
+    if per_page < 1 or per_page > 100:
+        return {"success": False, "error": "Page size must be between 1 and 100"}
+
+    url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/assets"
+    headers = get_auth_headers()
+    params = {
+        "query": f'"{query}"',
+        "page": page,
+        "per_page": per_page
+    }
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+
+            data = response.json()
+            assets = data.get("assets", [])
+
+            link_header = response.headers.get("Link", "")
+            pagination_info = parse_link_header(link_header)
+            next_page = pagination_info.get("next")
+
+            return {
+                "success": True,
+                "assets": assets,
+                "pagination": {
+                    "current_page": page,
+                    "next_page": next_page,
+                    "has_next": bool(next_page),
+                    "per_page": per_page
+                }
+            }
+        except httpx.HTTPStatusError as e:
+            try:
+                return {"success": False, "error": str(e), "details": e.response.json()}
+            except Exception:
+                return {"success": False, "error": str(e), "raw_response": e.response.text}
+        except Exception as e:
+            return {"success": False, "error": f"Unexpected error occurred: {str(e)}"}
         
 #CREATE REQUESTER
 @mcp.tool()
