@@ -56,6 +56,27 @@ The server provides a comprehensive toolkit for Freshservice operations:
 | `get_all_assets` | List all assets with pagination | `page`, `per_page` |
 | `get_asset_by_id` | Retrieve single asset details | `asset_id` |
 | `filter_assets` | Find assets matching criteria | `query`, `page`, `per_page` |
+| `list_asset_types` | List available asset types | `page`, `per_page` |
+| `list_asset_fields` | List asset field definitions | None |
+| `create_asset` | Create a new asset | `asset_type_id`, `fields` |
+| `update_asset` | Update an existing asset | `asset_id`, `fields` |
+| `delete_asset` | Delete an asset | `asset_id` |
+
+**Asset filtering notes:**
+- `filter_assets` accepts the `AssetFilter` schema and will auto-quote the `query` value if you don't include surrounding double quotes.
+- You can still pass a pre-quoted query string if you prefer explicit control over the filter syntax.
+
+### Product Management
+
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `create_product` | Create a new product | `name`, `asset_type_id`, `status`, `manufacturer` |
+| `update_product` | Update an existing product | `id`, `name`, `asset_type_id`, `status`, `manufacturer` |
+
+**Product status options:**
+- String values: `"In Production"`, `"In Pipeline"`, `"Retired"`
+- Numeric values: `1` (In Production), `2` (In Pipeline), `3` (Retired)
+- Enum values: `ProductStatus.IN_PRODUCTION`, `ProductStatus.IN_PIPELINE`, `ProductStatus.RETIRED`
 
 **Asset filtering notes:**
 - `filter_assets` accepts the `AssetFilter` schema and will auto-quote the `query` value if you don't include surrounding double quotes.

@@ -114,6 +114,22 @@ class ProductStatus(IntEnum):
     IN_PRODUCTION = 1
     IN_PIPELINE = 2
     RETIRED = 3
+
+
+class AssetCreate(BaseModel):
+    asset_type_id: int = Field(..., description="ID of the asset type")
+    fields: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional asset fields to set on creation"
+    )
+
+
+class AssetUpdate(BaseModel):
+    asset_id: int = Field(..., description="ID of the asset to update")
+    fields: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Asset fields to update"
+    )
     
 class AgentInput(BaseModel):
     first_name: str = Field(..., description="First name of the agent")
@@ -174,6 +190,28 @@ def parse_link_header(link_header: str) -> Dict[str, Optional[int]]:
                 pagination[rel] = page_num
 
     return pagination
+
+
+def build_http_error(error: httpx.HTTPStatusError, message: str) -> Dict[str, Any]:
+    response = error.response
+    details = None
+    raw_response = None
+    if response is not None:
+        try:
+            details = response.json()
+        except Exception:
+            raw_response = response.text
+
+    payload: Dict[str, Any] = {
+        "success": False,
+        "error": f"{message}: {str(error)}",
+        "status_code": response.status_code if response is not None else None
+    }
+    if details is not None:
+        payload["details"] = details
+    if raw_response is not None:
+        payload["raw_response"] = raw_response
+    return payload
 
 #GET TICKET FIELDS
 @mcp.tool()
@@ -1880,6 +1918,7 @@ async def get_all_assets(page: Optional[int] = 1, per_page: Optional[int] = 30) 
                 }
             }
         except httpx.HTTPStatusError as e:
+            return build_http_error(e, "Failed to list assets")
             try:
                 return {"success": False, "error": str(e), "details": e.response.json()}
             except Exception:
@@ -1900,6 +1939,7 @@ async def get_asset_by_id(asset_id: int) -> Dict[str, Any]:
             response.raise_for_status()
             return {"success": True, "data": response.json()}
         except httpx.HTTPStatusError as e:
+            return build_http_error(e, "Failed to fetch asset")
             try:
                 return {
                     "success": False,
@@ -1963,10 +2003,121 @@ async def filter_assets(filters: AssetFilter) -> Dict[str, Any]:
                 }
             }
         except httpx.HTTPStatusError as e:
-            try:
-                return {"success": False, "error": str(e), "details": e.response.json()}
-            except Exception:
-                return {"success": False, "error": str(e), "raw_response": e.response.text}
+            return build_http_error(e, "Failed to filter assets")
+        except Exception as e:
+            return {"success": False, "error": f"Unexpected error occurred: {str(e)}"}
+
+#LIST ASSET TYPES
+@mcp.tool()
+async def list_asset_types(page: Optional[int] = 1, per_page: Optional[int] = 30) -> Dict[str, Any]:
+    """List asset types from Freshservice."""
+    if page < 1:
+        return {"success": False, "error": "Page number must be greater than 0"}
+    if per_page < 1 or per_page > 100:
+        return {"success": False, "error": "Page size must be between 1 and 100"}
+
+    url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/asset_types"
+    headers = get_auth_headers()
+    params = {"page": page, "per_page": per_page}
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+
+            data = response.json()
+            asset_types = data.get("asset_types", [])
+
+            link_header = response.headers.get("Link", "")
+            pagination_info = parse_link_header(link_header)
+            next_page = pagination_info.get("next")
+
+            return {
+                "success": True,
+                "asset_types": asset_types,
+                "pagination": {
+                    "current_page": page,
+                    "next_page": next_page,
+                    "has_next": bool(next_page),
+                    "per_page": filters.per_page
+                }
+            }
+        except httpx.HTTPStatusError as e:
+            return build_http_error(e, "Failed to list asset types")
+        except Exception as e:
+            return {"success": False, "error": f"Unexpected error occurred: {str(e)}"}
+
+#LIST ASSET FIELDS
+@mcp.tool()
+async def list_asset_fields() -> Dict[str, Any]:
+    """List asset fields from Freshservice."""
+    url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/asset_form_fields"
+    headers = get_auth_headers()
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return {"success": True, "data": response.json()}
+        except httpx.HTTPStatusError as e:
+            return build_http_error(e, "Failed to list asset fields")
+        except Exception as e:
+            return {"success": False, "error": f"Unexpected error occurred: {str(e)}"}
+
+#CREATE ASSET
+@mcp.tool()
+async def create_asset(asset: AssetCreate) -> Dict[str, Any]:
+    """Create an asset in Freshservice."""
+    url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/assets"
+    headers = get_auth_headers()
+    payload = {"asset_type_id": asset.asset_type_id, **asset.fields}
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            return {"success": True, "data": response.json()}
+        except httpx.HTTPStatusError as e:
+            return build_http_error(e, "Failed to create asset")
+        except Exception as e:
+            return {"success": False, "error": f"Unexpected error occurred: {str(e)}"}
+
+#UPDATE ASSET
+@mcp.tool()
+async def update_asset(asset: AssetUpdate) -> Dict[str, Any]:
+    """Update an asset in Freshservice."""
+    if not asset.fields:
+        return {"success": False, "error": "At least one field must be provided for update"}
+
+    url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/assets/{asset.asset_id}"
+    headers = get_auth_headers()
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.put(url, headers=headers, json=asset.fields)
+            response.raise_for_status()
+            return {"success": True, "data": response.json()}
+        except httpx.HTTPStatusError as e:
+            return build_http_error(e, "Failed to update asset")
+        except Exception as e:
+            return {"success": False, "error": f"Unexpected error occurred: {str(e)}"}
+
+#DELETE ASSET
+@mcp.tool()
+async def delete_asset(asset_id: int) -> Dict[str, Any]:
+    """Delete an asset in Freshservice."""
+    url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/assets/{asset_id}"
+    headers = get_auth_headers()
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.delete(url, headers=headers)
+            response.raise_for_status()
+            if response.content:
+                return {"success": True, "data": response.json()}
+            return {"success": True}
+        except httpx.HTTPStatusError as e:
+            return build_http_error(e, "Failed to delete asset")
         except Exception as e:
             return {"success": False, "error": f"Unexpected error occurred: {str(e)}"}
         
