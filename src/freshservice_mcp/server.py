@@ -166,45 +166,51 @@ def parse_link_header(link_header: str) -> Dict[str, Optional[int]]:
 
 #GET TICKET FIELDS
 @mcp.tool()
-async def get_ticket_fields() -> Dict[str, Any]:
+async def get_ticket_fields() -> str:
     """Get ticket fields from Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/ticket_form_fields"
     headers = get_auth_headers()
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
-        return response.json()
+        try:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            return json.dumps({"error": f"Failed to fetch ticket fields: {str(e)}"})
+        except Exception as e:
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
     
 #GET TICKETS
 @mcp.tool()
-async def get_tickets(page: Optional[int] = 1, per_page: Optional[int] = 30) -> Dict[str, Any]:
+async def get_tickets(page: Optional[int] = 1, per_page: Optional[int] = 30) -> str:
     """Get tickets from Freshservice with pagination support."""
-    
+
     if page < 1:
-        return {"error": "Page number must be greater than 0"}
-    
+        return json.dumps({"error": "Page number must be greater than 0"})
+
     if per_page < 1 or per_page > 100:
-        return {"error": "Page size must be between 1 and 100"}
+        return json.dumps({"error": "Page size must be between 1 and 100"})
 
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/tickets"
-    
+
     params = {
         "page": page,
         "per_page": per_page
     }
-    
+
     headers = get_auth_headers()
 
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers, params=params)
             response.raise_for_status()
-            
+
             link_header = response.headers.get('Link', '')
             pagination_info = parse_link_header(link_header)
-            
+
             tickets = response.json()
-            
-            return {
+
+            return json.dumps({
                 "tickets": tickets,
                 "pagination": {
                     "current_page": page,
@@ -212,12 +218,12 @@ async def get_tickets(page: Optional[int] = 1, per_page: Optional[int] = 30) -> 
                     "prev_page": pagination_info.get("prev"),
                     "per_page": per_page
                 }
-            }
-            
+            })
+
         except httpx.HTTPStatusError as e:
-            return {"error": f"Failed to fetch tickets: {str(e)}"}
+            return json.dumps({"error": f"Failed to fetch tickets: {str(e)}"})
         except Exception as e:
-            return {"error": f"An unexpected error occurred: {str(e)}"}
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
 
 #CREATE TICKET 
 @mcp.tool()
@@ -286,21 +292,21 @@ async def create_ticket(
 
 #UPDATE TICKET
 @mcp.tool()
-async def update_ticket(ticket_id: int, ticket_fields: Dict[str, Any]) -> Dict[str, Any]:
+async def update_ticket(ticket_id: int, ticket_fields: Dict[str, Any]) -> str:
     """Update a ticket in Freshservice."""
     if not ticket_fields:
-        return {"error": "No fields provided for update"}
+        return json.dumps({"error": "No fields provided for update"})
 
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/tickets/{ticket_id}"
     headers = get_auth_headers()
 
     custom_fields = ticket_fields.pop('custom_fields', {})
-    
+
     update_data = {}
-    
+
     for field, value in ticket_fields.items():
         update_data[field] = value
-    
+
     if custom_fields:
         update_data['custom_fields'] = custom_fields
 
@@ -308,13 +314,13 @@ async def update_ticket(ticket_id: int, ticket_fields: Dict[str, Any]) -> Dict[s
         try:
             response = await client.put(url, headers=headers, json=update_data)
             response.raise_for_status()
-            
-            return {
+
+            return json.dumps({
                 "success": True,
                 "message": "Ticket updated successfully",
                 "ticket": response.json()
-            }
-            
+            })
+
         except httpx.HTTPStatusError as e:
             error_message = f"Failed to update ticket: {str(e)}"
             try:
@@ -323,19 +329,19 @@ async def update_ticket(ticket_id: int, ticket_fields: Dict[str, Any]) -> Dict[s
                     error_message = f"Validation errors: {error_details['errors']}"
             except Exception:
                 pass
-            return {
+            return json.dumps({
                 "success": False,
                 "error": error_message
-            }
+            })
         except Exception as e:
-            return {
+            return json.dumps({
                 "success": False,
                 "error": f"An unexpected error occurred: {str(e)}"
-            }
+            })
             
 #FILTER TICKET 
 @mcp.tool()
-async def filter_tickets(query: str, page: int = 1, workspace_id: Optional[int] = None) -> Dict[str, Any]:
+async def filter_tickets(query: str, page: int = 1, workspace_id: Optional[int] = None) -> str:
     """Filter the tickets in Freshservice.
 
     Args:
@@ -348,7 +354,7 @@ async def filter_tickets(query: str, page: int = 1, workspace_id: Optional[int] 
     # Freshservice API requires the query to be wrapped in double quotes
     encoded_query = urllib.parse.quote(f'"{query}"')
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/tickets/filter?query={encoded_query}&page={page}"
-    
+
     if workspace_id is not None:
         url += f"&workspace_id={workspace_id}"
 
@@ -358,12 +364,12 @@ async def filter_tickets(query: str, page: int = 1, workspace_id: Optional[int] 
         try:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
         
 #DELETE TICKET.
 @mcp.tool()
@@ -389,14 +395,20 @@ async def delete_ticket(ticket_id: int) -> str:
     
 #GET TICKET BY ID  
 @mcp.tool()
-async def get_ticket_by_id(ticket_id:int) -> Dict[str, Any]:
+async def get_ticket_by_id(ticket_id:int) -> str:
     """Get a ticket in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/tickets/{ticket_id}"
     headers = get_auth_headers()
 
     async with httpx.AsyncClient() as client:
-        response = await client.get(url,headers=headers)
-        return response.json()
+        try:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            return json.dumps({"error": f"Failed to fetch ticket: {str(e)}"})
+        except Exception as e:
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
     
 #GET ALL CHANGES
 @mcp.tool()
@@ -409,9 +421,9 @@ async def get_changes(
     order_by: Optional[str] = None,
     updated_since: Optional[str] = None,
     workspace_id: Optional[int] = None
-) -> Dict[str, Any]:
+) -> str:
     """Get all changes from Freshservice with pagination and filtering support.
-    
+
     Args:
         page: Page number (default: 1)
         per_page: Number of items per page (1-100, default: 30)
@@ -423,7 +435,7 @@ async def get_changes(
         order_by: Sort order ('asc' or 'desc', default: 'desc')
         updated_since: Changes updated since date (ISO format: '2024-10-19T02:00:00Z')
         workspace_id: Filter by workspace ID (0 for all workspaces)
-        
+
     Query examples:
         - "priority:4 OR priority:3" - Urgent and High priority changes
         - "priority:>3 AND group_id:11 AND status:1" - High priority open changes for group 11
@@ -431,23 +443,23 @@ async def get_changes(
         - "status:<6" - Not closed changes (statuses 1-5)
         - "approval_status:1" - Approved changes
         - "planned_end_date:<'2025-01-14'" - Changes with end date before specified date
-        
+
     Note: Query and view parameters cannot be used together
     """
-    
+
     if page < 1:
-        return {"error": "Page number must be greater than 0"}
-    
+        return json.dumps({"error": "Page number must be greater than 0"})
+
     if per_page < 1 or per_page > 100:
-        return {"error": "Page size must be between 1 and 100"}
+        return json.dumps({"error": "Page size must be between 1 and 100"})
 
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes"
-    
+
     params = {
         "page": page,
         "per_page": per_page
     }
-    
+
     if query:
         params["query"] = query
     if view:
@@ -460,20 +472,20 @@ async def get_changes(
         params["updated_since"] = updated_since
     if workspace_id is not None:
         params["workspace_id"] = workspace_id
-    
+
     headers = get_auth_headers()
 
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers, params=params)
             response.raise_for_status()
-            
+
             link_header = response.headers.get('Link', '')
             pagination_info = parse_link_header(link_header)
-            
+
             changes = response.json()
-            
-            return {
+
+            return json.dumps({
                 "changes": changes,
                 "pagination": {
                     "current_page": page,
@@ -481,19 +493,19 @@ async def get_changes(
                     "prev_page": pagination_info.get("prev"),
                     "per_page": per_page
                 }
-            }
-            
+            })
+
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
         except Exception as e:
-            return {"error": f"An unexpected error occurred: {str(e)}"}
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
 
 #GET CHANGE BY ID
 @mcp.tool()
-async def get_change_by_id(change_id: int) -> Dict[str, Any]:
+async def get_change_by_id(change_id: int) -> str:
     """Get a specific change by ID in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}"
     headers = get_auth_headers()
@@ -502,11 +514,11 @@ async def get_change_by_id(change_id: int) -> Dict[str, Any]:
         try:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
-            return {"error": f"Failed to fetch change: {str(e)}"}
+            return json.dumps({"error": f"Failed to fetch change: {str(e)}"})
         except Exception as e:
-            return {"error": f"An unexpected error occurred: {str(e)}"}
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
 
 #CREATE CHANGE
 @mcp.tool()
@@ -529,9 +541,9 @@ async def create_change(
     rollout_plan: Optional[str] = None,
     backout_plan: Optional[str] = None,
     custom_fields: Optional[Dict[str, Any]] = None
-) -> Dict[str, Any]:
+) -> str:
     """Create a new change in Freshservice."""
-    
+
     try:
         priority_val = int(priority)
         impact_val = int(impact)
@@ -539,14 +551,14 @@ async def create_change(
         risk_val = int(risk)
         change_type_val = int(change_type)
     except ValueError:
-        return {"error": "Invalid value for priority, impact, status, risk, or change_type"}
+        return json.dumps({"error": "Invalid value for priority, impact, status, risk, or change_type"})
 
     if (priority_val not in [e.value for e in ChangePriority] or
         impact_val not in [e.value for e in ChangeImpact] or
         status_val not in [e.value for e in ChangeStatus] or
         risk_val not in [e.value for e in ChangeRisk] or
         change_type_val not in [e.value for e in ChangeType]):
-        return {"error": "Invalid value for priority, impact, status, risk, or change_type"}
+        return json.dumps({"error": "Invalid value for priority, impact, status, risk, or change_type"})
 
     data = {
         "requester_id": requester_id,
@@ -602,21 +614,21 @@ async def create_change(
         try:
             response = await client.post(url, headers=headers, json=data)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 400:
                 error_data = e.response.json()
                 if "errors" in error_data:
-                    return {"error": f"Validation Error: {error_data['errors']}"}
-            return {"error": f"Failed to create change - {str(e)}"}
+                    return json.dumps({"error": f"Validation Error: {error_data['errors']}"})
+            return json.dumps({"error": f"Failed to create change - {str(e)}"})
         except Exception as e:
-            return {"error": f"An unexpected error occurred - {str(e)}"}
+            return json.dumps({"error": f"An unexpected error occurred - {str(e)}"})
 
 #UPDATE CHANGE
 @mcp.tool()
-async def update_change(change_id: int, change_fields: Dict[str, Any]) -> Dict[str, Any]:
-    """Update an existing change in Freshservice. 
-    
+async def update_change(change_id: int, change_fields: Dict[str, Any]) -> str:
+    """Update an existing change in Freshservice.
+
     To update the change result explanation when closing a change:
     change_fields = {
         "status": 6,  # Closed
@@ -626,7 +638,7 @@ async def update_change(change_id: int, change_fields: Dict[str, Any]) -> Dict[s
     }
     """
     if not change_fields:
-        return {"error": "No fields provided for update"}
+        return json.dumps({"error": "No fields provided for update"})
 
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}"
     headers = get_auth_headers()
@@ -659,13 +671,13 @@ async def update_change(change_id: int, change_fields: Dict[str, Any]) -> Dict[s
         try:
             response = await client.put(url, headers=headers, json=update_data)
             response.raise_for_status()
-            
-            return {
+
+            return json.dumps({
                 "success": True,
                 "message": "Change updated successfully",
                 "change": response.json()
-            }
-            
+            })
+
         except httpx.HTTPStatusError as e:
             error_message = f"Failed to update change: {str(e)}"
             try:
@@ -674,15 +686,15 @@ async def update_change(change_id: int, change_fields: Dict[str, Any]) -> Dict[s
                     error_message = f"Validation errors: {error_details['errors']}"
             except Exception:
                 pass
-            return {
+            return json.dumps({
                 "success": False,
                 "error": error_message
-            }
+            })
         except Exception as e:
-            return {
+            return json.dumps({
                 "success": False,
                 "error": f"An unexpected error occurred: {str(e)}"
-            }
+            })
 
 #CLOSE CHANGE WITH RESULT
 @mcp.tool()
@@ -690,7 +702,7 @@ async def close_change(
     change_id: int,
     change_result_explanation: str,
     custom_fields: Optional[Dict[str, Any]] = None
-) -> Dict[str, Any]:
+) -> str:
     """Close a change and provide the result explanation.
     This is a convenience function that updates status to Closed and sets the result explanation."""
     
@@ -738,9 +750,9 @@ async def filter_changes(
     sort: Optional[str] = None,
     order_by: Optional[str] = None,
     workspace_id: Optional[int] = None
-) -> Dict[str, Any]:
+) -> str:
     """Filter changes in Freshservice based on a query.
-    
+
     Args:
         query: Filter query string (e.g., "status:2 AND priority:1" or "approval_status:1 AND planned_end_date:<'2025-01-14' AND status:<6")
                **CRITICAL**: Query must be wrapped in double quotes for filtering to work!
@@ -751,7 +763,7 @@ async def filter_changes(
         sort: Field to sort by
         order_by: Sort order ('asc' or 'desc')
         workspace_id: Optional workspace ID filter
-        
+
     Common query examples:
         - "status:2" - Open changes
         - "status:<6" - Not closed changes (statuses 1-5)
@@ -773,7 +785,7 @@ async def filter_changes(
 
 #GET CHANGE TASKS
 @mcp.tool()
-async def get_change_tasks(change_id: int) -> Dict[str, Any]:
+async def get_change_tasks(change_id: int) -> str:
     """Get all tasks associated with a change."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/tasks"
     headers = get_auth_headers()
@@ -782,15 +794,15 @@ async def get_change_tasks(change_id: int) -> Dict[str, Any]:
         try:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
-            return {"error": f"Failed to fetch change tasks: {str(e)}"}
+            return json.dumps({"error": f"Failed to fetch change tasks: {str(e)}"})
         except Exception as e:
-            return {"error": f"An unexpected error occurred: {str(e)}"}
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
 
 #CREATE CHANGE NOTE
 @mcp.tool()
-async def create_change_note(change_id: int, body: str) -> Dict[str, Any]:
+async def create_change_note(change_id: int, body: str) -> str:
     """Create a note for a change in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/notes"
     headers = get_auth_headers()
@@ -801,11 +813,11 @@ async def create_change_note(change_id: int, body: str) -> Dict[str, Any]:
         try:
             response = await client.post(url, headers=headers, json=data)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
-            return {"error": f"Failed to create change note: {str(e)}"}
+            return json.dumps({"error": f"Failed to create change note: {str(e)}"})
         except Exception as e:
-            return {"error": f"An unexpected error occurred: {str(e)}"}
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
 
 # CHANGES APPROVAL ENDPOINTS
 
@@ -816,9 +828,9 @@ async def create_change_approval_group(
     name: str,
     approver_ids: List[int],
     approval_type: str = "everyone"
-) -> Dict[str, Any]:
+) -> str:
     """Create an approval group for a change.
-    
+
     Args:
         change_id: The ID of the change
         name: Name of the approval group
@@ -832,17 +844,17 @@ async def create_change_approval_group(
         "approver_ids": approver_ids,
         "approval_type": approval_type
     }
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(url, headers=headers, json=data)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 #UPDATE CHANGE APPROVAL GROUP
 @mcp.tool()
@@ -852,11 +864,11 @@ async def update_change_approval_group(
     name: Optional[str] = None,
     approver_ids: Optional[List[int]] = None,
     approval_type: Optional[str] = None
-) -> Dict[str, Any]:
+) -> str:
     """Update a change approval group."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/approval_groups/{group_id}"
     headers = get_auth_headers()
-    
+
     data = {}
     if name is not None:
         data["name"] = name
@@ -864,232 +876,232 @@ async def update_change_approval_group(
         data["approver_ids"] = approver_ids
     if approval_type is not None:
         data["approval_type"] = approval_type
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.put(url, headers=headers, json=data)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 #CANCEL CHANGE APPROVAL GROUP
 @mcp.tool()
-async def cancel_change_approval_group(change_id: int, group_id: int) -> Dict[str, Any]:
+async def cancel_change_approval_group(change_id: int, group_id: int) -> str:
     """Cancel a change approval group."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/approval_groups/{group_id}/cancel"
     headers = get_auth_headers()
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.put(url, headers=headers)
             response.raise_for_status()
-            return {"success": True, "message": "Approval group cancelled successfully"}
+            return json.dumps({"success": True, "message": "Approval group cancelled successfully"})
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 #UPDATE APPROVAL CHAIN RULE FOR CHANGE
 @mcp.tool()
 async def update_approval_chain_rule_change(
     change_id: int,
     approval_chain_type: str = "parallel"
-) -> Dict[str, Any]:
+) -> str:
     """Update approval chain rule for a change.
-    
+
     Args:
         change_id: The ID of the change
         approval_chain_type: Type of approval chain ('parallel' or 'sequential')
     """
     if approval_chain_type not in ["parallel", "sequential"]:
-        return {"error": "approval_chain_type must be 'parallel' or 'sequential'"}
-    
+        return json.dumps({"error": "approval_chain_type must be 'parallel' or 'sequential'"})
+
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/approval_chain"
     headers = get_auth_headers()
     data = {"approval_chain_type": approval_chain_type}
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.put(url, headers=headers, json=data)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 #LIST CHANGE APPROVAL GROUPS
 @mcp.tool()
-async def list_change_approval_groups(change_id: int) -> Dict[str, Any]:
+async def list_change_approval_groups(change_id: int) -> str:
     """List all approval groups within a change."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/approval_groups"
     headers = get_auth_headers()
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 #VIEW CHANGE APPROVAL
 @mcp.tool()
-async def view_change_approval(change_id: int, approval_id: int) -> Dict[str, Any]:
+async def view_change_approval(change_id: int, approval_id: int) -> str:
     """View a specific change approval."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/approvals/{approval_id}"
     headers = get_auth_headers()
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 #LIST CHANGE APPROVALS
 @mcp.tool()
-async def list_change_approvals(change_id: int) -> Dict[str, Any]:
+async def list_change_approvals(change_id: int) -> str:
     """List all change approvals."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/approvals"
     headers = get_auth_headers()
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 #SEND CHANGE APPROVAL REMINDER
 @mcp.tool()
-async def send_change_approval_reminder(change_id: int, approval_id: int) -> Dict[str, Any]:
+async def send_change_approval_reminder(change_id: int, approval_id: int) -> str:
     """Send reminder for a change approval."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/approvals/{approval_id}/resend_approval"
     headers = get_auth_headers()
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.put(url, headers=headers)
             response.raise_for_status()
-            return {"success": True, "message": "Reminder sent successfully"}
+            return json.dumps({"success": True, "message": "Reminder sent successfully"})
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 #CANCEL CHANGE APPROVAL
 @mcp.tool()
-async def cancel_change_approval(change_id: int, approval_id: int) -> Dict[str, Any]:
+async def cancel_change_approval(change_id: int, approval_id: int) -> str:
     """Cancel a change approval."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/approvals/{approval_id}/cancel"
     headers = get_auth_headers()
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.put(url, headers=headers)
             response.raise_for_status()
-            return {"success": True, "message": "Approval cancelled successfully"}
+            return json.dumps({"success": True, "message": "Approval cancelled successfully"})
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 # CHANGES NOTES ENDPOINTS
 
 #VIEW CHANGE NOTE
 @mcp.tool()
-async def view_change_note(change_id: int, note_id: int) -> Dict[str, Any]:
+async def view_change_note(change_id: int, note_id: int) -> str:
     """View a specific note for a change."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/notes/{note_id}"
     headers = get_auth_headers()
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 #LIST CHANGE NOTES
 @mcp.tool()
-async def list_change_notes(change_id: int) -> Dict[str, Any]:
+async def list_change_notes(change_id: int) -> str:
     """List all notes for a change."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/notes"
     headers = get_auth_headers()
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 #UPDATE CHANGE NOTE
 @mcp.tool()
-async def update_change_note(change_id: int, note_id: int, body: str) -> Dict[str, Any]:
+async def update_change_note(change_id: int, note_id: int, body: str) -> str:
     """Update a note for a change."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/notes/{note_id}"
     headers = get_auth_headers()
     data = {"body": body}
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.put(url, headers=headers, json=data)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 #DELETE CHANGE NOTE
 @mcp.tool()
-async def delete_change_note(change_id: int, note_id: int) -> Dict[str, Any]:
+async def delete_change_note(change_id: int, note_id: int) -> str:
     """Delete a note for a change."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/notes/{note_id}"
     headers = get_auth_headers()
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.delete(url, headers=headers)
             if response.status_code == 204:
-                return {"success": True, "message": "Note deleted successfully"}
+                return json.dumps({"success": True, "message": "Note deleted successfully"})
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 # CHANGES TASKS ENDPOINTS
 
@@ -1104,53 +1116,53 @@ async def create_change_task(
     assigned_to_id: Optional[int] = None,
     group_id: Optional[int] = None,
     due_date: Optional[str] = None
-) -> Dict[str, Any]:
+) -> str:
     """Create a task for a change."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/tasks"
     headers = get_auth_headers()
-    
+
     data = {
         "title": title,
         "description": description,
         "status": status,
         "priority": priority
     }
-    
+
     if assigned_to_id:
         data["assigned_to_id"] = assigned_to_id
     if group_id:
         data["group_id"] = group_id
     if due_date:
         data["due_date"] = due_date
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(url, headers=headers, json=data)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 #VIEW CHANGE TASK
 @mcp.tool()
-async def view_change_task(change_id: int, task_id: int) -> Dict[str, Any]:
+async def view_change_task(change_id: int, task_id: int) -> str:
     """View a specific task for a change."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/tasks/{task_id}"
     headers = get_auth_headers()
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 #UPDATE CHANGE TASK
 @mcp.tool()
@@ -1158,41 +1170,41 @@ async def update_change_task(
     change_id: int,
     task_id: int,
     task_fields: Dict[str, Any]
-) -> Dict[str, Any]:
+) -> str:
     """Update a task for a change."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/tasks/{task_id}"
     headers = get_auth_headers()
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.put(url, headers=headers, json=task_fields)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 #DELETE CHANGE TASK
 @mcp.tool()
-async def delete_change_task(change_id: int, task_id: int) -> Dict[str, Any]:
+async def delete_change_task(change_id: int, task_id: int) -> str:
     """Delete a task for a change."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/tasks/{task_id}"
     headers = get_auth_headers()
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.delete(url, headers=headers)
             if response.status_code == 204:
-                return {"success": True, "message": "Task deleted successfully"}
+                return json.dumps({"success": True, "message": "Task deleted successfully"})
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 # CHANGES TIME ENTRIES ENDPOINTS
 
@@ -1204,9 +1216,9 @@ async def create_change_time_entry(
     note: str,
     agent_id: int,
     executed_at: Optional[str] = None
-) -> Dict[str, Any]:
+) -> str:
     """Create a time entry for a change.
-    
+
     Args:
         change_id: The ID of the change
         time_spent: Time spent in format "hh:mm" (e.g., "02:30")
@@ -1216,62 +1228,62 @@ async def create_change_time_entry(
     """
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/time_entries"
     headers = get_auth_headers()
-    
+
     data = {
         "time_spent": time_spent,
         "note": note,
         "agent_id": agent_id
     }
-    
+
     if executed_at:
         data["executed_at"] = executed_at
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(url, headers=headers, json=data)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 #VIEW CHANGE TIME ENTRY
 @mcp.tool()
-async def view_change_time_entry(change_id: int, time_entry_id: int) -> Dict[str, Any]:
+async def view_change_time_entry(change_id: int, time_entry_id: int) -> str:
     """View a specific time entry for a change."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/time_entries/{time_entry_id}"
     headers = get_auth_headers()
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 #LIST CHANGE TIME ENTRIES
 @mcp.tool()
-async def list_change_time_entries(change_id: int) -> Dict[str, Any]:
+async def list_change_time_entries(change_id: int) -> str:
     """List all time entries for a change."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/time_entries"
     headers = get_auth_headers()
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 #UPDATE CHANGE TIME ENTRY
 @mcp.tool()
@@ -1280,97 +1292,97 @@ async def update_change_time_entry(
     time_entry_id: int,
     time_spent: Optional[str] = None,
     note: Optional[str] = None
-) -> Dict[str, Any]:
+) -> str:
     """Update a time entry for a change."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/time_entries/{time_entry_id}"
     headers = get_auth_headers()
-    
+
     data = {}
     if time_spent is not None:
         data["time_spent"] = time_spent
     if note is not None:
         data["note"] = note
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.put(url, headers=headers, json=data)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 #DELETE CHANGE TIME ENTRY
 @mcp.tool()
-async def delete_change_time_entry(change_id: int, time_entry_id: int) -> Dict[str, Any]:
+async def delete_change_time_entry(change_id: int, time_entry_id: int) -> str:
     """Delete a time entry for a change."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/time_entries/{time_entry_id}"
     headers = get_auth_headers()
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.delete(url, headers=headers)
             if response.status_code == 204:
-                return {"success": True, "message": "Time entry deleted successfully"}
+                return json.dumps({"success": True, "message": "Time entry deleted successfully"})
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 # OTHER CHANGES ENDPOINTS
 
 #MOVE CHANGE
 @mcp.tool()
-async def move_change(change_id: int, workspace_id: int) -> Dict[str, Any]:
+async def move_change(change_id: int, workspace_id: int) -> str:
     """Move a change to another workspace."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/changes/{change_id}/move_workspace"
     headers = get_auth_headers()
     data = {"workspace_id": workspace_id}
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.put(url, headers=headers, json=data)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 #LIST CHANGE FIELDS
 @mcp.tool()
-async def list_change_fields() -> Dict[str, Any]:
+async def list_change_fields() -> str:
     """List all change fields."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/change_form_fields"
     headers = get_auth_headers()
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             try:
-                return {"error": str(e), "details": e.response.json()}
+                return json.dumps({"error": str(e), "details": e.response.json()})
             except Exception:
-                return {"error": str(e), "raw_response": e.response.text}
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
 
 #GET SERVICE ITEMS
 @mcp.tool()
-async def list_service_items(page: Optional[int] = 1, per_page: Optional[int] = 30) -> Dict[str, Any]:
+async def list_service_items(page: Optional[int] = 1, per_page: Optional[int] = 30) -> str:
     """Get list of service items from Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/service_catalog/items"
 
     if page < 1:
-        return {"error": "Page number must be greater than 0"}
+        return json.dumps({"error": "Page number must be greater than 0"})
     if per_page < 1 or per_page > 100:
-        return {"error": "Page size must be between 1 and 100"}
+        return json.dumps({"error": "Page size must be between 1 and 100"})
 
     headers = get_auth_headers()
     all_items: List[Dict[str, Any]] = []
@@ -1399,11 +1411,11 @@ async def list_service_items(page: Optional[int] = 1, per_page: Optional[int] = 
                 current_page = pagination_info["next"]
 
             except httpx.HTTPStatusError as e:
-                return {"error": f"HTTP error occurred: {str(e)}"}
+                return json.dumps({"error": f"HTTP error occurred: {str(e)}"})
             except Exception as e:
-                return {"error": f"Unexpected error: {str(e)}"}
+                return json.dumps({"error": f"Unexpected error: {str(e)}"})
 
-    return {
+    return json.dumps({
         "success": True,
         "items": all_items,
         "pagination": {
@@ -1411,31 +1423,31 @@ async def list_service_items(page: Optional[int] = 1, per_page: Optional[int] = 
             "per_page": per_page,
             "last_fetched_page": current_page
         }
-    }
+    })
        
 #GET REQUESTED ITEMS 
 @mcp.tool()
-async def get_requested_items(ticket_id: int) -> dict:
+async def get_requested_items(ticket_id: int) -> str:
     """Fetch requested items for a specific ticket if the ticket is a service request."""
-    
+
     async def get_ticket(ticket_id: int) -> dict:
         """Fetch ticket details by ticket ID to check the ticket type."""
         url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/tickets/{ticket_id}"
-        headers = get_auth_headers()  
+        headers = get_auth_headers()
 
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(url, headers=headers)
-                response.raise_for_status()  
+                response.raise_for_status()
                 ticket_data = response.json()
-                
+
                 # Check if the ticket type is a service request
                 if ticket_data.get("ticket", {}).get("type") != "Service Request":
                     return {"success": False, "error": "Requested items can only be fetched for service requests"}
-                
+
                 # If ticket is a service request, proceed to fetch the requested items
                 return {"success": True, "ticket_type": "Service Request"}
-            
+
             except httpx.HTTPStatusError as e:
                 return {"success": False, "error": f"HTTP error occurred: {str(e)}"}
             except Exception as e:
@@ -1443,31 +1455,31 @@ async def get_requested_items(ticket_id: int) -> dict:
 
     # Step 1: Check if the ticket is a service request
     ticket_check = await get_ticket(ticket_id)
-    
+
     if not ticket_check.get("success", False):
-        return ticket_check  # If ticket fetching or type check failed, return the error message
-    
+        return json.dumps(ticket_check)  # If ticket fetching or type check failed, return the error message
+
     # Step 2: If the ticket is a service request, fetch the requested items
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/tickets/{ticket_id}/requested_items"
-    headers = get_auth_headers()  # Use your existing method to get the headers
+    headers = get_auth_headers()
 
     async with httpx.AsyncClient() as client:
         try:
             # Send GET request to fetch requested items
             response = await client.get(url, headers=headers)
-            response.raise_for_status()  # Will raise HTTPError for bad responses
+            response.raise_for_status()
 
             # If the response contains requested items, return them
             if response.status_code == 200:
-                return response.json()
+                return json.dumps(response.json())
 
         except httpx.HTTPStatusError as e:
             # If a 400 error occurs, return a message saying no service items exist
             if e.response.status_code == 400:
-                return {"success": False, "error": "There are no service items for this ticket"}
-            return {"success": False, "error": f"HTTP error occurred: {str(e)}"}
+                return json.dumps({"success": False, "error": "There are no service items for this ticket"})
+            return json.dumps({"success": False, "error": f"HTTP error occurred: {str(e)}"})
         except Exception as e:
-            return {"success": False, "error": f"An unexpected error occurred: {str(e)}"}
+            return json.dumps({"success": False, "error": f"An unexpected error occurred: {str(e)}"})
 
 #CREATE SERVICE REQUEST
 @mcp.tool()
@@ -1476,13 +1488,13 @@ async def create_service_request(
     email: str,
     requested_for: Optional[str] = None,
     quantity: int = 1
-) -> dict:
+) -> str:
     """Create a service request in Freshservice."""
     if not isinstance(quantity, int) or quantity <= 0:
-        return {"success": False, "error": "Quantity must be a positive integer."}
+        return json.dumps({"success": False, "error": "Quantity must be a positive integer."})
 
     if requested_for and "@" not in requested_for:
-        return {"success": False, "error": "requested_for must be a valid email address."}
+        return json.dumps({"success": False, "error": "requested_for must be a valid email address."})
 
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/service_catalog/items/{display_id}/place_request"
 
@@ -1500,16 +1512,16 @@ async def create_service_request(
         try:
             response = await client.post(url, headers=headers, json=payload)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             error_message = f"Failed to place request: {str(e)}"
             try:
                 error_details = e.response.json()
-                return {"success": False, "error": error_details}
+                return json.dumps({"success": False, "error": error_details})
             except Exception:
-                return {"success": False, "error": error_message}
+                return json.dumps({"success": False, "error": error_message})
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            return json.dumps({"success": False, "error": str(e)})
 
 #SEND TICKET REPLY
 @mcp.tool()
@@ -1520,16 +1532,16 @@ async def send_ticket_reply(
     user_id: Optional[int] = None,
     cc_emails: Optional[Union[str, List[str]]] = None,
     bcc_emails: Optional[Union[str, List[str]]] = None
-) -> dict:
+) -> str:
     """
     Send reply to a ticket in Freshservice."""
 
     # Validation
     if not ticket_id or not isinstance(ticket_id, int) or ticket_id < 1:
-        return {"success": False, "error": "Invalid ticket_id: Must be an integer >= 1"}
+        return json.dumps({"success": False, "error": "Invalid ticket_id: Must be an integer >= 1"})
 
     if not body or not isinstance(body, str) or not body.strip():
-        return {"success": False, "error": "Missing or empty body: Reply content is required"}
+        return json.dumps({"success": False, "error": "Missing or empty body: Reply content is required"})
 
     def parse_emails(value):
         if isinstance(value, str):
@@ -1563,15 +1575,15 @@ async def send_ticket_reply(
         try:
             response = await client.post(url, json=payload, headers=headers)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
-            return {"success": False, "error": f"HTTP error occurred: {str(e)}"}
+            return json.dumps({"success": False, "error": f"HTTP error occurred: {str(e)}"})
         except Exception as e:
-            return {"success": False, "error": f"An unexpected error occurred: {str(e)}"}
+            return json.dumps({"success": False, "error": f"An unexpected error occurred: {str(e)}"})
 
 #CREATE A Note
 @mcp.tool()
-async def create_ticket_note(ticket_id: int,body: str)-> Dict[str, Any]:
+async def create_ticket_note(ticket_id: int,body: str)-> str:
     """Create a note for a ticket in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/tickets/{ticket_id}/notes"
     headers = get_auth_headers()
@@ -1579,14 +1591,20 @@ async def create_ticket_note(ticket_id: int,body: str)-> Dict[str, Any]:
         "body": body
     }
     async with httpx.AsyncClient() as client:
-        response = await client.post(url, headers=headers, json=data)
-        return response.json()
+        try:
+            response = await client.post(url, headers=headers, json=data)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            return json.dumps({"error": f"Failed to create ticket note: {str(e)}"})
+        except Exception as e:
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
     
  #UPDATE A CONVERSATION
 
 #UPDATE TICKET CONVERSATION
 @mcp.tool()
-async def update_ticket_conversation(conversation_id: int,body: str)-> Dict[str, Any]:
+async def update_ticket_conversation(conversation_id: int,body: str)-> str:
     """Update a conversation for a ticket in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/conversations/{conversation_id}"
     headers = get_auth_headers()
@@ -1594,37 +1612,41 @@ async def update_ticket_conversation(conversation_id: int,body: str)-> Dict[str,
         "body": body
     }
     async with httpx.AsyncClient() as client:
-        response = await client.put(url, headers=headers, json=data)
-        status_code = response.status_code
-        if status_code == 200:
-            return response.json()
-        else:
-            return f"Cannot update conversation ${response.json()}"
+        try:
+            response = await client.put(url, headers=headers, json=data)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            return json.dumps({"error": f"Cannot update conversation: {str(e)}"})
+        except Exception as e:
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
         
 #GET ALL TICKET CONVERSATION
 @mcp.tool()
-async def list_all_ticket_conversation(ticket_id: int)-> Dict[str, Any]:
+async def list_all_ticket_conversation(ticket_id: int)-> str:
     """List all conversation of a ticket in freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/tickets/{ticket_id}/conversations"
     headers = get_auth_headers()
-   
+
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
-        status_code = response.status_code
-        if status_code == 200:
-            return response.json()
-        else:
-            return f"Cannot fetch ticket conversations ${response.json()}"
+        try:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            return json.dumps({"error": f"Cannot fetch ticket conversations: {str(e)}"})
+        except Exception as e:
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
         
 #GET ALL PRODUCTS
 @mcp.tool()
-async def get_all_products(page: Optional[int] = 1, per_page: Optional[int] = 30) -> Dict[str, Any]:
+async def get_all_products(page: Optional[int] = 1, per_page: Optional[int] = 30) -> str:
     """List all the products from Freshservice."""
     if page < 1:
-        return {"error": "Page number must be greater than 0"}
-    
+        return json.dumps({"error": "Page number must be greater than 0"})
+
     if per_page < 1 or per_page > 100:
-        return {"error": "Page size must be between 1 and 100"}
+        return json.dumps({"error": "Page size must be between 1 and 100"})
 
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/products"
     headers = get_auth_headers()
@@ -1646,7 +1668,7 @@ async def get_all_products(page: Optional[int] = 1, per_page: Optional[int] = 30
             pagination_info = parse_link_header(link_header)
             next_page = pagination_info.get("next")
 
-            return {
+            return json.dumps({
                 "success": True,
                 "products": products,
                 "pagination": {
@@ -1655,27 +1677,29 @@ async def get_all_products(page: Optional[int] = 1, per_page: Optional[int] = 30
                     "has_next": bool(next_page),
                     "per_page": per_page
                 }
-            }
+            })
 
         except httpx.HTTPStatusError as e:
-            return {"success": False, "error": f"HTTP error occurred: {str(e)}"}
+            return json.dumps({"success": False, "error": f"HTTP error occurred: {str(e)}"})
         except Exception as e:
-            return {"success": False, "error": f"Unexpected error occurred: {str(e)}"}
+            return json.dumps({"success": False, "error": f"Unexpected error occurred: {str(e)}"})
         
 #GET PRODUCT BY ID
 @mcp.tool()
-async def get_products_by_id(product_id:int)-> Dict[str, Any]:
+async def get_products_by_id(product_id:int)-> str:
     """Get product by product ID in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/products/{product_id}"
     headers = get_auth_headers()
-   
+
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
-        status_code = response.status_code
-        if status_code == 200:
-            return response.json()
-        else:
-            return f"Cannot fetch products from the freshservice ${response.json()}"
+        try:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            return json.dumps({"error": f"Cannot fetch products from freshservice: {str(e)}"})
+        except Exception as e:
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
         
 #CREATE PRODUCT
 @mcp.tool()
@@ -1688,7 +1712,7 @@ async def create_product(
     depreciation_type_id: Optional[int] = None,
     description: Optional[str] = None,
     description_text: Optional[str] = None
-) -> Dict[str, Any]:
+) -> str:
     """Create a product in Freshservice."""
 
     # Allowed statuses mapping
@@ -1704,13 +1728,13 @@ async def create_product(
     # Validate status
     if status is not None:
         if status not in allowed_statuses:
-            return {
+            return json.dumps({
                 "success": False,
                 "error": (
                     "Invalid 'status'. It should be one of: "
                     "[\"In Production\", 1], [\"In Pipeline\", 2], [\"Retired\", 3]"
                 )
-            }
+            })
         status = allowed_statuses[status]
 
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/products"
@@ -1738,21 +1762,21 @@ async def create_product(
         try:
             response = await client.post(url, headers=headers, json=payload)
             response.raise_for_status()
-            return {"success": True, "data": response.json()}
+            return json.dumps({"success": True, "data": response.json()})
         except httpx.HTTPStatusError as http_err:
-            return {
+            return json.dumps({
                 "success": False,
                 "status_code": response.status_code,
                 "error": f"HTTP error occurred: {http_err}",
                 "response": response.json()
-            }
+            })
         except Exception as err:
-            return {
+            return json.dumps({
                 "success": False,
                 "error": f"An unexpected error occurred: {err}"
-            }
+            })
 
-#UPDATE PRODUCT 
+#UPDATE PRODUCT
 @mcp.tool()
 async def update_product(
     id: int,
@@ -1764,7 +1788,7 @@ async def update_product(
     depreciation_type_id: Optional[int] = None,
     description: Optional[str] = None,
     description_text: Optional[str] = None
-) -> Dict[str, Any]:
+) -> str:
     """Update a product in Freshservice."""
 
     allowed_statuses = {
@@ -1778,13 +1802,13 @@ async def update_product(
 
     if status is not None:
         if status not in allowed_statuses:
-            return {
+            return json.dumps({
                 "success": False,
                 "error": (
                     "Invalid 'status'. It should be one of: "
                     "[\"In Production\", 1], [\"In Pipeline\", 2], [\"Retired\", 3]"
                 )
-            }
+            })
         status = allowed_statuses[status]
 
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/products/{id}"
@@ -1813,19 +1837,19 @@ async def update_product(
         try:
             response = await client.put(url, headers=headers, json=payload)
             response.raise_for_status()
-            return {"success": True, "data": response.json()}
+            return json.dumps({"success": True, "data": response.json()})
         except httpx.HTTPStatusError as http_err:
-            return {
+            return json.dumps({
                 "success": False,
                 "status_code": response.status_code,
                 "error": f"HTTP error occurred: {http_err}",
                 "response": response.json()
-            }
+            })
         except Exception as err:
-            return {
+            return json.dumps({
                 "success": False,
                 "error": f"Unexpected error occurred: {err}"
-            }
+            })
         
 #CREATE REQUESTER
 @mcp.tool()
@@ -1847,17 +1871,17 @@ async def create_requester(
     location_id: Optional[int] = None,
     background_information: Optional[str] = None,
     custom_fields: Optional[Dict[str, Any]] = None
-) -> Dict[str, Any]:
+) -> str:
     """Creates a requester in Freshservice."""
 
     if not isinstance(first_name, str) or not first_name.strip():
-        return {"success": False, "error": "'first_name' must be a non-empty string."}
+        return json.dumps({"success": False, "error": "'first_name' must be a non-empty string."})
 
     if not (primary_email or work_phone_number or mobile_phone_number):
-        return {
+        return json.dumps({
             "success": False,
             "error": "At least one of 'primary_email', 'work_phone_number', or 'mobile_phone_number' is required."
-        }
+        })
 
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/requesters"
     headers = get_auth_headers()
@@ -1892,30 +1916,30 @@ async def create_requester(
         try:
             response = await client.post(url, headers=headers, json=payload)
             response.raise_for_status()
-            return {"success": True, "data": response.json()}
+            return json.dumps({"success": True, "data": response.json()})
 
         except httpx.HTTPStatusError as http_err:
-            return {
+            return json.dumps({
                 "success": False,
                 "status_code": response.status_code,
                 "error": f"HTTP error: {http_err}",
                 "response": response.json()
-            }
+            })
         except Exception as err:
-            return {
+            return json.dumps({
                 "success": False,
                 "error": f"Unexpected error: {err}"
-            }
-            
+            })
+
 #GET ALL REQUESTER
 @mcp.tool()
-async def get_all_requesters(page: int = 1, per_page: int = 30) -> Dict[str, Any]:
+async def get_all_requesters(page: int = 1, per_page: int = 30) -> str:
     """Fetch all requesters from Freshservice."""
     if page < 1:
-        return {"success": False, "error": "Page number must be greater than 0"}
-    
+        return json.dumps({"success": False, "error": "Page number must be greater than 0"})
+
     if per_page < 1 or per_page > 100:
-        return {"success": False, "error": "Page size must be between 1 and 100"}
+        return json.dumps({"success": False, "error": "Page size must be between 1 and 100"})
 
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/requesters"
     headers = get_auth_headers()
@@ -1932,7 +1956,7 @@ async def get_all_requesters(page: int = 1, per_page: int = 30) -> Dict[str, Any
             link_header = response.headers.get("Link", "")
             pagination_info = parse_link_header(link_header)
 
-            return {
+            return json.dumps({
                 "success": True,
                 "requesters": requesters,
                 "pagination": {
@@ -1942,41 +1966,45 @@ async def get_all_requesters(page: int = 1, per_page: int = 30) -> Dict[str, Any
                     "prev_page": pagination_info.get("prev"),
                     "has_more": pagination_info.get("next") is not None
                 }
-            }
+            })
         except httpx.HTTPStatusError as e:
-            return {"success": False, "error": f"HTTP error: {str(e)}"}
+            return json.dumps({"success": False, "error": f"HTTP error: {str(e)}"})
         except Exception as e:
-            return {"success": False, "error": f"Unexpected error: {str(e)}"}
+            return json.dumps({"success": False, "error": f"Unexpected error: {str(e)}"})
 
 #GET REQUESTERS BY ID
 @mcp.tool()
-async def get_requester_id(requester_id:int)-> Dict[str, Any]:
+async def get_requester_id(requester_id:int)-> str:
     """Get requester by ID in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/requesters/{requester_id}"
     headers = get_auth_headers()
-   
+
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
-        status_code = response.status_code
-        if status_code == 200:
-            return response.json()
-        else:
-            return f"Cannot fetch requester from the freshservice ${response.json()}"
+        try:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            return json.dumps({"error": f"Cannot fetch requester from freshservice: {str(e)}"})
+        except Exception as e:
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
 
 #LIST ALL REQUESTER FIELDS
 @mcp.tool()
-async def list_all_requester_fields()-> Dict[str, Any]:
+async def list_all_requester_fields()-> str:
     """List all requester fields in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/requester_fields"
     headers = get_auth_headers()
-   
+
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
-        status_code = response.status_code
-        if status_code == 200:
-            return response.json()
-        else:
-            return f"Cannot fetch requester from the freshservice ${response.json()}"
+        try:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            return json.dumps({"error": f"Cannot fetch requester fields from freshservice: {str(e)}"})
+        except Exception as e:
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
         
 #UPDATE REQUESTER
 @mcp.tool()
@@ -1999,7 +2027,7 @@ async def update_requester(
     location_id: Optional[int] = None,
     background_information: Optional[str] = None,
     custom_fields: Optional[Dict[str, Any]] = None
-) -> Dict[str, Any]:
+) -> str:
     """Update a requester in Freshservice."""
 
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/requesters/{requester_id}"
@@ -2028,33 +2056,39 @@ async def update_requester(
     data = {k: v for k, v in payload.items() if v is not None}
 
     async with httpx.AsyncClient() as client:
-        response = await client.put(url, headers=headers, json=data)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            return {"success": False, "error": response.text, "status_code": response.status_code}   
+        try:
+            response = await client.put(url, headers=headers, json=data)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            return json.dumps({"success": False, "error": str(e), "status_code": e.response.status_code})
+        except Exception as e:
+            return json.dumps({"success": False, "error": f"An unexpected error occurred: {str(e)}"})   
         
 #FILTER REQUESTERS
 @mcp.tool()
-async def filter_requesters(query: str,include_agents: bool = False) -> Dict[str, Any]:
+async def filter_requesters(query: str,include_agents: bool = False) -> str:
     """Filter requesters in Freshservice."""
     encoded_query = urllib.parse.quote(query)
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/requesters?query={encoded_query}"
-    
+
     if include_agents:
         url += "&include_agents=true"
 
     headers = get_auth_headers()
 
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            return {
-                "error": f"Failed to filter requesters: {response.status_code}",
-                "details": response.text
-            }
+        try:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            return json.dumps({
+                "error": f"Failed to filter requesters: {e.response.status_code}",
+                "details": e.response.text
+            })
+        except Exception as e:
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
 
 #CREATE AN AGENT
 @mcp.tool()
@@ -2066,9 +2100,9 @@ async def create_agent(
     job_title: Optional[str] = None,
     work_phone_number: Optional[int] = None,
     mobile_phone_number: Optional[int] = None,
-) -> Dict[str, Any]:
+) -> str:
     """Create a new agent in Freshservice."""
-    
+
     data = AgentInput(
         first_name=first_name,
         last_name=last_name,
@@ -2083,40 +2117,45 @@ async def create_agent(
     headers = get_auth_headers()
 
     async with httpx.AsyncClient() as client:
-        response = await client.post(url, headers=headers, json=data)
-        if response.status_code == 200 or response.status_code == 201:
-            return response.json()
-        else:
-            return {
-                "error": f"Failed to create agent",
-                "status_code": response.status_code,
-                "details": response.json()
-            }
+        try:
+            response = await client.post(url, headers=headers, json=data)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            return json.dumps({
+                "error": "Failed to create agent",
+                "status_code": e.response.status_code,
+                "details": e.response.json()
+            })
+        except Exception as e:
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
 
 #GET AN AGENT
 @mcp.tool()
-async def get_agent(agent_id:int)-> Dict[str, Any]:
+async def get_agent(agent_id:int)-> str:
     """Get agent by id in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/agents/{agent_id}"
     headers = get_auth_headers()
-   
+
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
-        status_code = response.status_code
-        if status_code == 200:
-            return response.json()
-        else:
-            return f"Cannot fetch requester from the freshservice ${response.json()}"
+        try:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            return json.dumps({"error": f"Cannot fetch agent from freshservice: {str(e)}"})
+        except Exception as e:
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
             
 #GET ALL AGENTS
 @mcp.tool()
-async def get_all_agents(page: int = 1, per_page: int = 30) -> Dict[str, Any]:
+async def get_all_agents(page: int = 1, per_page: int = 30) -> str:
     """Fetch agents from Freshservice."""
     if page < 1:
-        return {"success": False, "error": "Page number must be greater than 0"}
+        return json.dumps({"success": False, "error": "Page number must be greater than 0"})
 
     if per_page < 1 or per_page > 100:
-        return {"success": False, "error": "Page size must be between 1 and 100"}
+        return json.dumps({"success": False, "error": "Page size must be between 1 and 100"})
 
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/agents"
     headers = get_auth_headers()
@@ -2134,7 +2173,7 @@ async def get_all_agents(page: int = 1, per_page: int = 30) -> Dict[str, Any]:
             link_header = response.headers.get("Link", "")
             pagination_info = parse_link_header(link_header)
 
-            return {
+            return json.dumps({
                 "success": True,
                 "agents": agents,
                 "pagination": {
@@ -2144,7 +2183,7 @@ async def get_all_agents(page: int = 1, per_page: int = 30) -> Dict[str, Any]:
                     "prev_page": pagination_info.get("prev"),
                     "has_more": pagination_info.get("next") is not None
                 }
-            }
+            })
         except httpx.HTTPStatusError as e:
             error_text = None
             try:
@@ -2152,15 +2191,15 @@ async def get_all_agents(page: int = 1, per_page: int = 30) -> Dict[str, Any]:
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to get all agents: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
             
 #FILTER AGENTS
 @mcp.tool()
-async def filter_agents(query: str) -> List[Dict[str, Any]]:
+async def filter_agents(query: str) -> str:
     """Filter Freshservice agents based on a query."""
     base_url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/agents"
     headers = get_auth_headers()
@@ -2170,29 +2209,34 @@ async def filter_agents(query: str) -> List[Dict[str, Any]]:
     encoded_query = urllib.parse.quote(f'"{query}"')
 
     async with httpx.AsyncClient() as client:
-        while True:
-            url = f"{base_url}?query={encoded_query}&page={page}"
-            response = await client.get(url, headers=headers)
-            response.raise_for_status()
+        try:
+            while True:
+                url = f"{base_url}?query={encoded_query}&page={page}"
+                response = await client.get(url, headers=headers)
+                response.raise_for_status()
 
-            data = response.json()
-            all_agents.extend(data.get("agents", []))
+                data = response.json()
+                all_agents.extend(data.get("agents", []))
 
-            link_header = response.headers.get("link")
-            pagination = parse_link_header(link_header)
+                link_header = response.headers.get("link")
+                pagination = parse_link_header(link_header)
 
-            if not pagination.get("next"):
-                break
-            page = pagination["next"]
+                if not pagination.get("next"):
+                    break
+                page = pagination["next"]
+        except httpx.HTTPStatusError as e:
+            return json.dumps({"error": f"Failed to filter agents: {str(e)}"})
+        except Exception as e:
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
 
-    return all_agents
+    return json.dumps(all_agents)
 
 #UPDATE AGENT
 @mcp.tool()
-async def update_agent(agent_id, occasional=None, email=None, department_ids=None, 
-                 can_see_all_tickets_from_associated_departments=None, reporting_manager_id=None, 
-                 address=None, time_zone=None, time_format=None, language=None, 
-                 location_id=None, background_information=None, scoreboard_level_id=None):
+async def update_agent(agent_id, occasional=None, email=None, department_ids=None,
+                 can_see_all_tickets_from_associated_departments=None, reporting_manager_id=None,
+                 address=None, time_zone=None, time_format=None, language=None,
+                 location_id=None, background_information=None, scoreboard_level_id=None) -> str:
     """Update the agent details in the Freshservice."""
     
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/agents/{agent_id}"
@@ -2216,74 +2260,82 @@ async def update_agent(agent_id, occasional=None, email=None, department_ids=Non
     payload = {k: v for k, v in payload.items() if v is not None}
     
     async with httpx.AsyncClient() as client:
-        response = await client.put(url, headers=headers,json=payload)
-        status_code = response.status_code
-        if status_code == 200:
-            return response.json()
-        else:
-            return f"Cannot fetch agents from the freshservice ${response.json()}"
-                      
+        try:
+            response = await client.put(url, headers=headers, json=payload)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            return json.dumps({"error": f"Cannot update agent in freshservice: {str(e)}"})
+        except Exception as e:
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
+
 #GET AGENT FIELDS
 @mcp.tool()
-async def get_agent_fields()-> Dict[str, Any]:
+async def get_agent_fields()-> str:
     """Get all agent fields in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/agent_fields"
     headers = get_auth_headers()
-   
+
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
-        status_code = response.status_code
-        if status_code == 200:
-            return response.json()
-        else:
-            return f"Cannot fetch agents from the freshservice ${response.json()}"
+        try:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            return json.dumps({"error": f"Cannot fetch agent fields from freshservice: {str(e)}"})
+        except Exception as e:
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
         
 #GET ALL AGENT GROUPS
 @mcp.tool()
-async def get_all_agent_groups()-> Dict[str, Any]:
+async def get_all_agent_groups()-> str:
     """Get all agent groups in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/groups"
     headers = get_auth_headers()
-   
+
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
-        status_code = response.status_code
-        if status_code == 200:
-            return response.json()
-        else:
-            return f"Cannot fetch agents from the freshservice ${response.json()}"
+        try:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            return json.dumps({"error": f"Cannot fetch agent groups from freshservice: {str(e)}"})
+        except Exception as e:
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
         
 #GET AGENT GROUP BY ID
 @mcp.tool()
-async def getAgentGroupById(group_id:int)-> Dict[str, Any]:
+async def getAgentGroupById(group_id:int)-> str:
     """Get agent groups by its group id in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/groups/{group_id}"
     headers = get_auth_headers()
-   
+
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
-        status_code = response.status_code
-        if status_code == 200:
-            return response.json()
-        else:
-            return f"Cannot fetch agents from the freshservice ${response.json()}"
+        try:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            return json.dumps({"error": f"Cannot fetch agent group from freshservice: {str(e)}"})
+        except Exception as e:
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
         
 #ADD REQUESTER TO GROUP
 @mcp.tool()
 async def add_requester_to_group(
     group_id: int,
     requester_id: int
-) -> Dict[str, Any]:
+) -> str:
     """Add a requester to a manual requester group in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/requester_groups/{group_id}/members/{requester_id}"
-    headers = get_auth_headers()  
+    headers = get_auth_headers()
 
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(url, headers=headers)
-            response.raise_for_status() 
+            response.raise_for_status()
 
-            return {"success": f"Requester {requester_id} added to group {group_id}."}
+            return json.dumps({"success": f"Requester {requester_id} added to group {group_id}."})
 
         except httpx.HTTPStatusError as e:
             error_text = None
@@ -2292,18 +2344,18 @@ async def add_requester_to_group(
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to add requester to group: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
         
 #CREATE GROUP
 @mcp.tool()
-async def create_group(group_data: Dict[str, Any]) -> Dict[str, Any]:
+async def create_group(group_data: Dict[str, Any]) -> str:
     """Create a group in Freshservice."""
     if "name" not in group_data:
-        return {"error": "Field 'name' is required to create a group."}
+        return json.dumps({"error": "Field 'name' is required to create a group."})
 
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/groups"
     headers = get_auth_headers()
@@ -2312,8 +2364,8 @@ async def create_group(group_data: Dict[str, Any]) -> Dict[str, Any]:
         try:
             response = await client.post(url, headers=headers, json=group_data)
             response.raise_for_status()
-            return response.json()
-        
+            return json.dumps(response.json())
+
         except httpx.HTTPStatusError as e:
             error_text = None
             try:
@@ -2321,29 +2373,29 @@ async def create_group(group_data: Dict[str, Any]) -> Dict[str, Any]:
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to create group: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
         
 #UPDATE GROUP
 @mcp.tool()
-async def update_group(group_id: int, group_fields: Dict[str, Any]) -> Dict[str, Any]:
+async def update_group(group_id: int, group_fields: Dict[str, Any]) -> str:
     """Update a group in Freshservice."""
     try:
         validated_fields = GroupCreate(**group_fields)
         group_data = validated_fields.model_dump(exclude_none=True)
     except Exception as e:
-        return {"error": f"Validation error: {str(e)}"}
+        return json.dumps({"error": f"Validation error: {str(e)}"})
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/groups/{group_id}"
     headers = get_auth_headers()
     async with httpx.AsyncClient() as client:
         try:
             response = await client.put(url, headers=headers, json=group_data)
             response.raise_for_status()
-            return response.json()
-        
+            return json.dumps(response.json())
+
         except httpx.HTTPStatusError as e:
             error_text = None
             try:
@@ -2351,21 +2403,21 @@ async def update_group(group_id: int, group_fields: Dict[str, Any]) -> Dict[str,
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to update group: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
             
 #GET ALL REQUETER GROUPS 
 @mcp.tool()
-async def get_all_requester_groups(page: Optional[int] = 1, per_page: Optional[int] = 30) -> Dict[str, Any]:
+async def get_all_requester_groups(page: Optional[int] = 1, per_page: Optional[int] = 30) -> str:
     """Get all requester groups in Freshservice."""
     if page < 1:
-        return {"error": "Page number must be greater than 0"}
-    
+        return json.dumps({"error": "Page number must be greater than 0"})
+
     if per_page < 1 or per_page > 100:
-        return {"error": "Page size must be between 1 and 100"}
+        return json.dumps({"error": "Page size must be between 1 and 100"})
 
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/requester_groups"
     headers = get_auth_headers()
@@ -2386,7 +2438,7 @@ async def get_all_requester_groups(page: Optional[int] = 1, per_page: Optional[i
 
             data = response.json()
 
-            return {
+            return json.dumps({
                 "success": True,
                 "requester_groups": data,
                 "pagination": {
@@ -2395,34 +2447,36 @@ async def get_all_requester_groups(page: Optional[int] = 1, per_page: Optional[i
                     "prev_page": pagination_info.get("prev"),
                     "per_page": per_page
                 }
-            }
+            })
 
         except httpx.HTTPStatusError as e:
-            return {"error": f"Failed to fetch all requester groups: {str(e)}"}
+            return json.dumps({"error": f"Failed to fetch all requester groups: {str(e)}"})
         except Exception as e:
-            return {"error": f"An unexpected error occurred: {str(e)}"}
-        
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
+
 #GET REQUETER GROUPS BY ID
 @mcp.tool()
-async def get_requester_groups_by_id(requester_group_id:int)-> Dict[str, Any]:
+async def get_requester_groups_by_id(requester_group_id:int)-> str:
     """Get requester groups in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/requester_groups/{requester_group_id}"
     headers = get_auth_headers()
-   
+
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
-        status_code = response.status_code
-        if status_code == 200:
-            return response.json()
-        else:
-            return f"Cannot fetch requester group from the freshservice ${response.json()}"
+        try:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            return json.dumps({"error": f"Cannot fetch requester group from freshservice: {str(e)}"})
+        except Exception as e:
+            return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
         
 #CREATE REQUESTER GROUP
 @mcp.tool()
 async def create_requester_group(
     name: str,
     description: Optional[str] = None
-) -> Dict[str, Any]:
+) -> str:
     """Create a requester group in Freshservice."""
     group_data = {"name": name}
     if description:
@@ -2435,7 +2489,7 @@ async def create_requester_group(
         try:
             response = await client.post(url, headers=headers, json=group_data)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             error_text = None
             try:
@@ -2443,20 +2497,20 @@ async def create_requester_group(
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to create requester group: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
 
         except Exception as e:
-            return {
+            return json.dumps({
                 "error": f"Unexpected error occurred: {str(e)}"
-            }
+            })
             
 #UPDATE REQUESTER GROUP
 @mcp.tool()
-async def update_requester_group(id: int,name: Optional[str] = None,description: Optional[str] = None) -> Dict[str, Any]:
+async def update_requester_group(id: int,name: Optional[str] = None,description: Optional[str] = None) -> str:
     """Update an requester group in Freshservice."""
     group_data = {}
     if name:
@@ -2465,7 +2519,7 @@ async def update_requester_group(id: int,name: Optional[str] = None,description:
         group_data["description"] = description
 
     if not group_data:
-        return {"error": "At least one field (name or description) must be provided to update."}
+        return json.dumps({"error": "At least one field (name or description) must be provided to update."})
 
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/requester_groups/{id}"
     headers = get_auth_headers()
@@ -2474,7 +2528,7 @@ async def update_requester_group(id: int,name: Optional[str] = None,description:
         try:
             response = await client.put(url, headers=headers, json=group_data)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             error_text = None
             try:
@@ -2482,17 +2536,17 @@ async def update_requester_group(id: int,name: Optional[str] = None,description:
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to update requester group: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
-            
+            })
+
 #GET LIST OF REQUESTER GROUP MEMBERS
 @mcp.tool()
 async def list_requester_group_members(
     group_id: int
-) -> Dict[str, Any]:
+) -> str:
     """List all members of a requester group in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/requester_groups/{group_id}/members"
     headers = get_auth_headers()
@@ -2500,9 +2554,9 @@ async def list_requester_group_members(
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
-            response.raise_for_status() 
+            response.raise_for_status()
 
-            return response.json()
+            return json.dumps(response.json())
 
         except httpx.HTTPStatusError as e:
             error_text = None
@@ -2511,20 +2565,20 @@ async def list_requester_group_members(
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
-                "error": f"Failed to fetch list of requester group memebers: {str(e)}",
+            return json.dumps({
+                "error": f"Failed to fetch list of requester group members: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
 
         except Exception as e:
-            return {
+            return json.dumps({
                 "error": f"Unexpected error occurred: {str(e)}"
-            }
+            })
             
 #GET ALL CANNED RESPONSES
 @mcp.tool()
-async def get_all_canned_response() -> Dict[str, Any]:
+async def get_all_canned_response() -> str:
     """List all canned response in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/canned_responses"
     headers = get_auth_headers()
@@ -2532,10 +2586,9 @@ async def get_all_canned_response() -> Dict[str, Any]:
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
-            response.raise_for_status()  # Will raise an exception for 4xx/5xx responses
+            response.raise_for_status()
 
-            # Return the response JSON (list of members)
-            return response.json()
+            return json.dumps(response.json())
 
         except httpx.HTTPStatusError as e:
             error_text = None
@@ -2544,22 +2597,22 @@ async def get_all_canned_response() -> Dict[str, Any]:
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to get all canned response folder: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
 
         except Exception as e:
-            return {
+            return json.dumps({
                 "error": f"Unexpected error occurred: {str(e)}"
-            }
+            })
 
 #GET CANNED RESPONSE BY ID
 @mcp.tool()
 async def get_canned_response(
     id: int
-) -> Dict[str, Any]:
+) -> str:
     """Get a canned response in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/canned_responses/{id}"
     headers = get_auth_headers()
@@ -2567,41 +2620,41 @@ async def get_canned_response(
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
-            response.raise_for_status()  # Will raise HTTPStatusError for 4xx/5xx responses
+            response.raise_for_status()
 
             # Only parse JSON if the response is not empty
             if response.content:
-                return response.json()
+                return json.dumps(response.json())
             else:
-                return {"error": "No content returned for the requested canned response."}
+                return json.dumps({"error": "No content returned for the requested canned response."})
 
         except httpx.HTTPStatusError as e:
             # Handle specific HTTP errors like 404, 403, etc.
             if e.response.status_code == 404:
-                return {"error": "Canned response not found (404)"}
+                return json.dumps({"error": "Canned response not found (404)"})
             else:
-                return {
+                return json.dumps({
                     "error": f"Failed to retrieve canned response: {str(e)}",
                     "details": e.response.json() if e.response else None
-                }
+                })
 
         except Exception as e:
-            return {"error": f"Unexpected error: {str(e)}"}
+            return json.dumps({"error": f"Unexpected error: {str(e)}"})
 
 #LIST ALL CANNED RESPONSE FOLDER            
 @mcp.tool()
-async def list_all_canned_response_folder() -> Dict[str, Any]:
+async def list_all_canned_response_folder() -> str:
     """List all canned response of a folder in Freshservice."""
-    
+
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/canned_response_folders"
     headers = get_auth_headers()
 
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
-            response.raise_for_status()  
+            response.raise_for_status()
 
-            return response.json()
+            return json.dumps(response.json())
 
         except httpx.HTTPStatusError as e:
             error_text = None
@@ -2610,22 +2663,22 @@ async def list_all_canned_response_folder() -> Dict[str, Any]:
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to list all canned response folder: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
 
         except Exception as e:
-            return {
+            return json.dumps({
                 "error": f"Unexpected error occurred: {str(e)}"
-            }
+            })
             
 #LIST CANNED RESPONSE FOLDER
 @mcp.tool()
 async def list_canned_response_folder(
     id: int
-) -> Dict[str, Any]:
+) -> str:
     """List canned response folder in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/canned_response_folders/{id}"
     headers = get_auth_headers()
@@ -2633,9 +2686,9 @@ async def list_canned_response_folder(
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
-            response.raise_for_status() 
+            response.raise_for_status()
 
-            return response.json()
+            return json.dumps(response.json())
 
         except httpx.HTTPStatusError as e:
             error_text = None
@@ -2644,20 +2697,20 @@ async def list_canned_response_folder(
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to list canned response folder: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
 
         except Exception as e:
-            return {
+            return json.dumps({
                 "error": f"Unexpected error occurred: {str(e)}"
-            }
+            })
             
 #GET ALL WORKSPACES
 @mcp.tool()
-async def list_all_workspaces() -> Dict[str, Any]:
+async def list_all_workspaces() -> str:
     """List all workspaces in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/workspaces"
     headers = get_auth_headers()
@@ -2665,9 +2718,9 @@ async def list_all_workspaces() -> Dict[str, Any]:
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
-            response.raise_for_status()  
+            response.raise_for_status()
 
-            return response.json()
+            return json.dumps(response.json())
 
         except httpx.HTTPStatusError as e:
             error_text = None
@@ -2676,20 +2729,20 @@ async def list_all_workspaces() -> Dict[str, Any]:
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to fetch list of solution workspaces: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
 
         except Exception as e:
-            return {
+            return json.dumps({
                 "error": f"Unexpected error occurred: {str(e)}"
-            }
+            })
 
 #GET WORKSPACE
 @mcp.tool()
-async def get_workspace(id: int) -> Dict[str, Any]:
+async def get_workspace(id: int) -> str:
     """Get a workspace by its ID in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/workspaces/{id}"
     headers = get_auth_headers()
@@ -2697,9 +2750,9 @@ async def get_workspace(id: int) -> Dict[str, Any]:
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
-            response.raise_for_status()  
+            response.raise_for_status()
 
-            return response.json()
+            return json.dumps(response.json())
 
         except httpx.HTTPStatusError as e:
             error_text = None
@@ -2708,20 +2761,20 @@ async def get_workspace(id: int) -> Dict[str, Any]:
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to fetch workspace: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
 
         except Exception as e:
-            return {
+            return json.dumps({
                 "error": f"Unexpected error occurred: {str(e)}"
-            }
+            })
             
 #GET ALL SOLUTION CATEGORY
 @mcp.tool()
-async def get_all_solution_category() -> Dict[str, Any]:
+async def get_all_solution_category() -> str:
     """Get all solution category in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/solutions/categories"
     headers = get_auth_headers()
@@ -2729,9 +2782,9 @@ async def get_all_solution_category() -> Dict[str, Any]:
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
-            response.raise_for_status()  
+            response.raise_for_status()
 
-            return response.json()
+            return json.dumps(response.json())
 
         except httpx.HTTPStatusError as e:
             error_text = None
@@ -2740,20 +2793,20 @@ async def get_all_solution_category() -> Dict[str, Any]:
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to get all solution category: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
 
         except Exception as e:
-            return {
+            return json.dumps({
                 "error": f"Unexpected error occurred: {str(e)}"
-            }
+            })
             
 #GET SOLUTION CATEGORY
 @mcp.tool()
-async def get_solution_category(id: int) -> Dict[str, Any]:
+async def get_solution_category(id: int) -> str:
     """Get solution category by its ID in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/solutions/categories/{id}"
     headers = get_auth_headers()
@@ -2761,9 +2814,9 @@ async def get_solution_category(id: int) -> Dict[str, Any]:
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
-            response.raise_for_status()  
+            response.raise_for_status()
 
-            return response.json()
+            return json.dumps(response.json())
 
         except httpx.HTTPStatusError as e:
             error_text = None
@@ -2772,16 +2825,16 @@ async def get_solution_category(id: int) -> Dict[str, Any]:
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to get solution category: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
 
         except Exception as e:
-            return {
+            return json.dumps({
                 "error": f"Unexpected error occurred: {str(e)}"
-            }
+            })
             
 #CREATE SOLUTION CATEGORY
 @mcp.tool()
@@ -2789,7 +2842,7 @@ async def create_solution_category(
     name: str,
     description: str = None,
     workspace_id: int = None,
-) -> Dict[str, Any]:
+) -> str:
     """Create a new solution category in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/solutions/categories"
     headers = get_auth_headers()
@@ -2805,9 +2858,9 @@ async def create_solution_category(
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(url, headers=headers, json=category_data)
-            response.raise_for_status() 
+            response.raise_for_status()
 
-            return response.json() 
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             error_text = None
             try:
@@ -2815,17 +2868,17 @@ async def create_solution_category(
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to create solution category: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
 
         except Exception as e:
-            return {
+            return json.dumps({
                 "error": f"Unexpected error occurred: {str(e)}"
-            }
-            
+            })
+
 #UPDATE SOLUTION CATEGORY
 @mcp.tool()
 async def update_solution_category(
@@ -2834,7 +2887,7 @@ async def update_solution_category(
     description: str = None,
     workspace_id: int = None,
     default_category: bool = None,
-) -> Dict[str, Any]:
+) -> str:
     """Update a solution category in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/solutions/categories/{category_id}"
     headers = get_auth_headers()
@@ -2853,9 +2906,9 @@ async def update_solution_category(
     async with httpx.AsyncClient() as client:
         try:
             response = await client.put(url, headers=headers, json=category_data)
-            response.raise_for_status()  
+            response.raise_for_status()
 
-            return response.json()  
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             error_text = None
             try:
@@ -2863,20 +2916,20 @@ async def update_solution_category(
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to update solution category: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
 
         except Exception as e:
-            return {
+            return json.dumps({
                 "error": f"Unexpected error occurred: {str(e)}"
-            }
+            })
 
 #GET LIST OF SOLUTION FOLDER
 @mcp.tool()
-async def get_list_of_solution_folder(id:int) -> Dict[str, Any]:
+async def get_list_of_solution_folder(id:int) -> str:
     """Get list of solution folder by its ID in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/solutions/folders?category_id={id}"
     headers = get_auth_headers()
@@ -2884,9 +2937,9 @@ async def get_list_of_solution_folder(id:int) -> Dict[str, Any]:
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
-            response.raise_for_status()  
+            response.raise_for_status()
 
-            return response.json()
+            return json.dumps(response.json())
 
         except httpx.HTTPStatusError as e:
             error_text = None
@@ -2895,20 +2948,20 @@ async def get_list_of_solution_folder(id:int) -> Dict[str, Any]:
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to fetch list of solution folder: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
 
         except Exception as e:
-            return {
+            return json.dumps({
                 "error": f"Unexpected error occurred: {str(e)}"
-            }
+            })
             
 #GET SOLUTION FOLDER
 @mcp.tool()
-async def get_solution_folder(id: int) -> Dict[str, Any]:
+async def get_solution_folder(id: int) -> str:
     """Get solution folder by its ID in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/solutions/folders/{id}"
     headers = get_auth_headers()
@@ -2916,9 +2969,9 @@ async def get_solution_folder(id: int) -> Dict[str, Any]:
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
-            response.raise_for_status()  
+            response.raise_for_status()
 
-            return response.json()
+            return json.dumps(response.json())
 
         except httpx.HTTPStatusError as e:
             error_text = None
@@ -2927,20 +2980,20 @@ async def get_solution_folder(id: int) -> Dict[str, Any]:
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to fetch solution folder: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
 
         except Exception as e:
-            return {
+            return json.dumps({
                 "error": f"Unexpected error occurred: {str(e)}"
-            }
+            })
             
 #GET LIST OF SOLUTION ARTICLE
 @mcp.tool()
-async def get_list_of_solution_article(id:int) -> Dict[str, Any]:
+async def get_list_of_solution_article(id:int) -> str:
     """Get list of solution article in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/solutions/articles?folder_id={id}"
     headers = get_auth_headers()
@@ -2948,9 +3001,9 @@ async def get_list_of_solution_article(id:int) -> Dict[str, Any]:
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
-            response.raise_for_status() 
+            response.raise_for_status()
 
-            return response.json()
+            return json.dumps(response.json())
 
         except httpx.HTTPStatusError as e:
             error_text = None
@@ -2959,20 +3012,20 @@ async def get_list_of_solution_article(id:int) -> Dict[str, Any]:
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to fetch list of solution article: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
 
         except Exception as e:
-            return {
+            return json.dumps({
                 "error": f"Unexpected error occurred: {str(e)}"
-            }
+            })
             
 #GET SOLUTION ARTICLE
 @mcp.tool()
-async def get_solution_article(id:int) -> Dict[str, Any]:
+async def get_solution_article(id:int) -> str:
     """Get solution article by id in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/solutions/articles/{id}"
     headers = get_auth_headers()
@@ -2980,8 +3033,8 @@ async def get_solution_article(id:int) -> Dict[str, Any]:
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers)
-            response.raise_for_status()  
-            return response.json()
+            response.raise_for_status()
+            return json.dumps(response.json())
 
         except httpx.HTTPStatusError as e:
             error_text = None
@@ -2990,16 +3043,16 @@ async def get_solution_article(id:int) -> Dict[str, Any]:
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to fetch solution article: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
 
         except Exception as e:
-            return {
+            return json.dumps({
                 "error": f"Unexpected error occurred: {str(e)}"
-            }
+            })
 
 #CREATE SOLUTION ARTICLE
 @mcp.tool()
@@ -3012,7 +3065,7 @@ async def create_solution_article(
     tags: Optional[List[str]] = None,
     keywords: Optional[List[str]] = None,
     review_date: Optional[str] = None  # Format: YYYY-MM-DD
-) -> Dict[str, Any]:
+) -> str:
     """Create a new solution article in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/solutions/articles"
     headers = get_auth_headers()
@@ -3034,7 +3087,7 @@ async def create_solution_article(
         try:
             response = await client.post(url, headers=headers, json=article_data)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             error_text = None
             try:
@@ -3042,17 +3095,17 @@ async def create_solution_article(
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to create solution article: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
 
         except Exception as e:
-            return {
+            return json.dumps({
                 "error": f"Unexpected error occurred: {str(e)}"
-            }
-            
+            })
+
 #UPDATE SOLUTION ARTICLE
 @mcp.tool()  
 async def update_solution_article(
@@ -3065,7 +3118,7 @@ async def update_solution_article(
     tags: Optional[List[str]] = None,
     keywords: Optional[List[str]] = None,
     review_date: Optional[str] = None       # Format: YYYY-MM-DD
-) -> Dict[str, Any]:
+) -> str:
     """Update a solution article in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/solutions/articles/{article_id}"
     headers = get_auth_headers()
@@ -3087,7 +3140,7 @@ async def update_solution_article(
         try:
             response = await client.put(url, headers=headers, json=update_data)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             error_text = None
             try:
@@ -3095,17 +3148,17 @@ async def update_solution_article(
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to update solution article: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
 
         except Exception as e:
-            return {
+            return json.dumps({
                 "error": f"Unexpected error occurred: {str(e)}"
-            }
-            
+            })
+
 #CREATE SOLUTION FOLDER
 @mcp.tool()
 async def create_solution_folder(
@@ -3114,11 +3167,11 @@ async def create_solution_folder(
     department_ids: List[int], 
     visibility: int = 4,  
     description: Optional[str] = None
-) -> Dict[str, Any]:
+) -> str:
     """Create a new folder under a solution category in Freshservice."""
-    
-    if not department_ids:  
-        return {"error": "department_ids must be provided and cannot be empty."}
+
+    if not department_ids:
+        return json.dumps({"error": "department_ids must be provided and cannot be empty."})
     
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/solutions/folders"
     headers = get_auth_headers()
@@ -3137,7 +3190,7 @@ async def create_solution_folder(
         try:
             response = await client.post(url, headers=headers, json=payload)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             error_text = None
             try:
@@ -3145,16 +3198,16 @@ async def create_solution_folder(
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to create solution folder: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
 
         except Exception as e:
-            return {
+            return json.dumps({
                 "error": f"Unexpected error occurred: {str(e)}"
-            }
+            })
 
 #UPDATE SOLUTION FOLDER
 @mcp.tool()
@@ -3163,7 +3216,7 @@ async def update_solution_folder(
     name: Optional[str] = None,
     description: Optional[str] = None,
     visibility: Optional[int] = None  # Allowed values: 1, 2, 3, 4, 5, 6, 7
-) -> Dict[str, Any]:
+) -> str:
     """Update an existing solution folder's details in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/solutions/folders/{id}"
     headers = get_auth_headers()
@@ -3180,8 +3233,8 @@ async def update_solution_folder(
         try:
             response = await client.put(url, headers=headers, json=payload)
             response.raise_for_status()
-            return response.json()
-        
+            return json.dumps(response.json())
+
         except httpx.HTTPStatusError as e:
             error_text = None
             try:
@@ -3189,20 +3242,20 @@ async def update_solution_folder(
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to update solution folder: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
 
         except Exception as e:
-            return {
+            return json.dumps({
                 "error": f"Unexpected error occurred: {str(e)}"
-            }
-                    
+            })
+
 #PUBLISH SOLUTION ARTICLE   
 @mcp.tool()
-async def publish_solution_article(article_id: int) -> Dict[str, Any]:
+async def publish_solution_article(article_id: int) -> str:
     """Publish a solution article in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/solutions/articles/{article_id}"
     headers = get_auth_headers()
@@ -3211,9 +3264,9 @@ async def publish_solution_article(article_id: int) -> Dict[str, Any]:
 
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.put(url, headers=headers,json=payload)
+            response = await client.put(url, headers=headers, json=payload)
             response.raise_for_status()
-            return response.json()
+            return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
             error_text = None
             try:
@@ -3221,16 +3274,16 @@ async def publish_solution_article(article_id: int) -> Dict[str, Any]:
             except Exception:
                 error_text = e.response.text if e.response else None
 
-            return {
+            return json.dumps({
                 "error": f"Failed to publish solution article: {str(e)}",
                 "status_code": e.response.status_code if e.response else None,
                 "details": error_text
-            }
+            })
 
         except Exception as e:
-            return {
+            return json.dumps({
                 "error": f"Unexpected error occurred: {str(e)}"
-            }
+            })
 
 # GET AUTH HEADERS
 def get_auth_headers():
