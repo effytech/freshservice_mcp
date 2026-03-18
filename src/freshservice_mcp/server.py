@@ -409,7 +409,142 @@ async def get_ticket_by_id(ticket_id:int) -> str:
             return json.dumps({"error": f"Failed to fetch ticket: {str(e)}"})
         except Exception as e:
             return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
-    
+
+# TICKET TIME ENTRIES ENDPOINTS
+
+#CREATE TICKET TIME ENTRY
+@mcp.tool()
+async def create_ticket_time_entry(
+    ticket_id: int,
+    time_spent: str,
+    note: str,
+    agent_id: int,
+    billable: Optional[bool] = None,
+    executed_at: Optional[str] = None
+) -> str:
+    """Create a time entry for a ticket.
+
+    Args:
+        ticket_id: The ID of the ticket
+        time_spent: Time spent in format "hh:mm" (e.g., "02:30")
+        note: Description of the work done
+        agent_id: ID of the agent who performed the work
+        billable: Whether the time entry is billable
+        executed_at: When the work was done (ISO format)
+    """
+    url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/tickets/{ticket_id}/time_entries"
+    headers = get_auth_headers()
+
+    data = {
+        "time_spent": time_spent,
+        "note": note,
+        "agent_id": agent_id
+    }
+
+    if billable is not None:
+        data["billable"] = billable
+    if executed_at:
+        data["executed_at"] = executed_at
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(url, headers=headers, json=data)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            try:
+                return json.dumps({"error": str(e), "details": e.response.json()})
+            except Exception:
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
+
+#LIST TICKET TIME ENTRIES
+@mcp.tool()
+async def list_ticket_time_entries(ticket_id: int) -> str:
+    """List all time entries for a ticket."""
+    url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/tickets/{ticket_id}/time_entries"
+    headers = get_auth_headers()
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            try:
+                return json.dumps({"error": str(e), "details": e.response.json()})
+            except Exception:
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
+
+#VIEW TICKET TIME ENTRY
+@mcp.tool()
+async def view_ticket_time_entry(ticket_id: int, time_entry_id: int) -> str:
+    """View a specific time entry for a ticket."""
+    url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/tickets/{ticket_id}/time_entries/{time_entry_id}"
+    headers = get_auth_headers()
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            try:
+                return json.dumps({"error": str(e), "details": e.response.json()})
+            except Exception:
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
+
+#UPDATE TICKET TIME ENTRY
+@mcp.tool()
+async def update_ticket_time_entry(
+    ticket_id: int,
+    time_entry_id: int,
+    time_spent: Optional[str] = None,
+    note: Optional[str] = None,
+    billable: Optional[bool] = None
+) -> str:
+    """Update a time entry for a ticket."""
+    url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/tickets/{ticket_id}/time_entries/{time_entry_id}"
+    headers = get_auth_headers()
+
+    data = {}
+    if time_spent is not None:
+        data["time_spent"] = time_spent
+    if note is not None:
+        data["note"] = note
+    if billable is not None:
+        data["billable"] = billable
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.put(url, headers=headers, json=data)
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            try:
+                return json.dumps({"error": str(e), "details": e.response.json()})
+            except Exception:
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
+
+#DELETE TICKET TIME ENTRY
+@mcp.tool()
+async def delete_ticket_time_entry(ticket_id: int, time_entry_id: int) -> str:
+    """Delete a time entry for a ticket."""
+    url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/tickets/{ticket_id}/time_entries/{time_entry_id}"
+    headers = get_auth_headers()
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.delete(url, headers=headers)
+            if response.status_code == 204:
+                return json.dumps({"success": True, "message": "Time entry deleted successfully"})
+            response.raise_for_status()
+            return json.dumps(response.json())
+        except httpx.HTTPStatusError as e:
+            try:
+                return json.dumps({"error": str(e), "details": e.response.json()})
+            except Exception:
+                return json.dumps({"error": str(e), "raw_response": e.response.text})
+
 #GET ALL CHANGES
 @mcp.tool()
 async def get_changes(
