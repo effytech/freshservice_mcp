@@ -388,7 +388,7 @@ async def delete_ticket(ticket_id: int) -> str:
                 return "Error: Unexpected response format"
     
 #GET TICKET BY ID  
-@mcp.tool(structured_output=False)
+@mcp.tool()
 async def get_ticket_by_id(ticket_id:int) -> Dict[str, Any]:
     """Get a ticket in Freshservice."""
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/tickets/{ticket_id}"
