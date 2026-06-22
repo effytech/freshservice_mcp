@@ -1,9 +1,10 @@
 import os
-import re   
+import re
 import httpx
 import logging
 import base64
 import json
+import mimetypes
 import urllib.parse
 from typing import Optional, Dict, Union, Any, List
 from mcp.server.fastmcp import FastMCP 
@@ -1666,10 +1667,21 @@ async def send_ticket_reply(
     from_email: Optional[str] = None,
     user_id: Optional[int] = None,
     cc_emails: Optional[Union[str, List[str]]] = None,
-    bcc_emails: Optional[Union[str, List[str]]] = None
+    bcc_emails: Optional[Union[str, List[str]]] = None,
+    attachments: Optional[Union[str, List[str]]] = None
 ) -> str:
     """
-    Send reply to a ticket in Freshservice."""
+    Send a public reply (visible to the requester) to a ticket in Freshservice.
+
+    from_email is OPTIONAL. Leave it unset and Freshservice uses the account's
+    default support email. Only pass from_email if it is a configured support
+    email address - an arbitrary address causes a 400 error.
+
+    attachments: optional local file path(s) - images, PDFs, etc. - to attach
+    to the reply. Accepts a single path or a list of paths. When attachments are
+    present the request is sent as multipart/form-data. (Freshservice limits:
+    up to 15 files, 40 MB total per request.)
+    """
 
     # Validation
     if not ticket_id or not isinstance(ticket_id, int) or ticket_id < 1:
@@ -1678,60 +1690,97 @@ async def send_ticket_reply(
     if not body or not isinstance(body, str) or not body.strip():
         return json.dumps({"success": False, "error": "Missing or empty body: Reply content is required"})
 
-    def parse_emails(value):
-        if isinstance(value, str):
-            try:
-                return json.loads(value)
-            except json.JSONDecodeError:
-                return []  # Invalid JSON format
-        return value or []
-
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/tickets/{ticket_id}/reply"
 
-    payload = {
-        "body": body.strip(),
-        "from_email": from_email or f"helpdesk@{FRESHSERVICE_DOMAIN}",
-    }
-
-    if user_id is not None:
-        payload["user_id"] = user_id
-
-    parsed_cc = parse_emails(cc_emails)
-    if parsed_cc:
-        payload["cc_emails"] = parsed_cc
-
-    parsed_bcc = parse_emails(bcc_emails)
-    if parsed_bcc:
-        payload["bcc_emails"] = parsed_bcc
-
-    headers = get_auth_headers()
+    cc = _coerce_to_list(cc_emails)
+    bcc = _coerce_to_list(bcc_emails)
+    attach_paths = _coerce_to_list(attachments)
 
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(url, json=payload, headers=headers)
+            if attach_paths:
+                # Attachments require multipart/form-data; JSON cannot carry files.
+                try:
+                    files = _build_attachment_parts(attach_paths)
+                except FileNotFoundError as fe:
+                    return json.dumps({"success": False, "error": str(fe)})
+                form = [("body", body.strip())]
+                if from_email:
+                    form.append(("from_email", from_email))
+                if user_id is not None:
+                    form.append(("user_id", str(user_id)))
+                for email in cc:
+                    form.append(("cc_emails[]", email))
+                for email in bcc:
+                    form.append(("bcc_emails[]", email))
+                response = await client.post(
+                    url, headers=get_auth_headers_multipart(), data=form, files=files
+                )
+            else:
+                payload = {"body": body.strip()}
+                if from_email:
+                    payload["from_email"] = from_email
+                if user_id is not None:
+                    payload["user_id"] = user_id
+                if cc:
+                    payload["cc_emails"] = cc
+                if bcc:
+                    payload["bcc_emails"] = bcc
+                response = await client.post(url, headers=get_auth_headers(), json=payload)
             response.raise_for_status()
             return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
-            return json.dumps({"success": False, "error": f"HTTP error occurred: {str(e)}"})
+            details = None
+            try:
+                details = e.response.json()
+            except Exception:
+                details = e.response.text if e.response is not None else None
+            return json.dumps({"success": False, "error": f"HTTP error occurred: {str(e)}", "details": details})
         except Exception as e:
             return json.dumps({"success": False, "error": f"An unexpected error occurred: {str(e)}"})
 
 #CREATE A Note
 @mcp.tool()
-async def create_ticket_note(ticket_id: int,body: str)-> str:
-    """Create a note for a ticket in Freshservice."""
+async def create_ticket_note(
+    ticket_id: int,
+    body: str,
+    private: bool = False,
+    attachments: Optional[Union[str, List[str]]] = None
+) -> str:
+    """Create a note on a ticket in Freshservice.
+
+    private: False (default) creates a PUBLIC note the requester can see; set
+    True for an internal/agent-only note.
+    attachments: optional local file path(s) - images, PDFs, etc. - to attach.
+    Accepts a single path or a list of paths (sent as multipart/form-data).
+    """
     url = f"https://{FRESHSERVICE_DOMAIN}/api/v2/tickets/{ticket_id}/notes"
-    headers = get_auth_headers()
-    data = {
-        "body": body
-    }
+    attach_paths = _coerce_to_list(attachments)
+
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(url, headers=headers, json=data)
+            if attach_paths:
+                # Attachments require multipart/form-data; JSON cannot carry files.
+                try:
+                    files = _build_attachment_parts(attach_paths)
+                except FileNotFoundError as fe:
+                    return json.dumps({"error": str(fe)})
+                form = [("body", body), ("private", str(bool(private)).lower())]
+                response = await client.post(
+                    url, headers=get_auth_headers_multipart(), data=form, files=files
+                )
+            else:
+                data = {"body": body, "private": bool(private)}
+                response = await client.post(url, headers=get_auth_headers(), json=data)
             response.raise_for_status()
             return json.dumps(response.json())
         except httpx.HTTPStatusError as e:
-            return json.dumps({"error": f"Failed to create ticket note: {str(e)}"})
+            details = None
+            try:
+                details = e.response.json()
+            except Exception:
+                details = e.response.text if e.response is not None else None
+            return json.dumps({"error": f"Failed to create ticket note: {str(e)}", "details": details})
         except Exception as e:
             return json.dumps({"error": f"An unexpected error occurred: {str(e)}"})
     
@@ -3426,6 +3475,42 @@ def get_auth_headers():
         "Authorization": f"Basic {base64.b64encode(f'{FRESHSERVICE_APIKEY}:X'.encode()).decode()}",
         "Content-Type": "application/json"
     }
+
+
+def get_auth_headers_multipart():
+    """Auth headers WITHOUT Content-Type so httpx sets the multipart boundary."""
+    return {
+        "Authorization": f"Basic {base64.b64encode(f'{FRESHSERVICE_APIKEY}:X'.encode()).decode()}"
+    }
+
+
+def _coerce_to_list(value):
+    """Normalize a str / JSON-encoded-list / list into a plain list of strings."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else [value]
+        except json.JSONDecodeError:
+            return [value]
+    return list(value)
+
+
+def _build_attachment_parts(attachments):
+    """Build httpx multipart file parts from a list of local file paths.
+
+    Returns a list of ("attachments[]", (filename, bytes, content_type)) tuples.
+    Raises FileNotFoundError if any path is missing.
+    """
+    parts = []
+    for path in attachments:
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"Attachment not found: {path}")
+        content_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
+        with open(path, "rb") as fh:
+            parts.append(("attachments[]", (os.path.basename(path), fh.read(), content_type)))
+    return parts
 
 def main():
     logging.info("Starting Freshservice MCP server")
