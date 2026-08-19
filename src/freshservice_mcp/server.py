@@ -1599,7 +1599,7 @@ async def update_ticket_conversation(conversation_id: int,body: str)-> Dict[str,
         if status_code == 200:
             return response.json()
         else:
-            return f"Cannot update conversation ${response.json()}"
+            return {"error": "Cannot update conversation", "details": response.json()}
         
 #GET ALL TICKET CONVERSATION
 @mcp.tool()
@@ -1614,7 +1614,7 @@ async def list_all_ticket_conversation(ticket_id: int)-> Dict[str, Any]:
         if status_code == 200:
             return response.json()
         else:
-            return f"Cannot fetch ticket conversations ${response.json()}"
+            return {"error": "Cannot fetch ticket conversations", "details": response.json()}
         
 #GET ALL PRODUCTS
 @mcp.tool()
@@ -1675,7 +1675,7 @@ async def get_products_by_id(product_id:int)-> Dict[str, Any]:
         if status_code == 200:
             return response.json()
         else:
-            return f"Cannot fetch products from the freshservice ${response.json()}"
+            return {"error": "Cannot fetch products from the freshservice", "details": response.json()}
         
 #CREATE PRODUCT
 @mcp.tool()
@@ -1961,7 +1961,7 @@ async def get_requester_id(requester_id:int)-> Dict[str, Any]:
         if status_code == 200:
             return response.json()
         else:
-            return f"Cannot fetch requester from the freshservice ${response.json()}"
+            return {"error": "Cannot fetch requester from the freshservice", "details": response.json()}
 
 #LIST ALL REQUESTER FIELDS
 @mcp.tool()
@@ -1976,7 +1976,7 @@ async def list_all_requester_fields()-> Dict[str, Any]:
         if status_code == 200:
             return response.json()
         else:
-            return f"Cannot fetch requester from the freshservice ${response.json()}"
+            return {"error": "Cannot fetch requester from the freshservice", "details": response.json()}
         
 #UPDATE REQUESTER
 @mcp.tool()
@@ -2106,7 +2106,7 @@ async def get_agent(agent_id:int)-> Dict[str, Any]:
         if status_code == 200:
             return response.json()
         else:
-            return f"Cannot fetch requester from the freshservice ${response.json()}"
+            return {"error": "Cannot fetch requester from the freshservice", "details": response.json()}
             
 #GET ALL AGENTS
 @mcp.tool()
@@ -2221,7 +2221,7 @@ async def update_agent(agent_id, occasional=None, email=None, department_ids=Non
         if status_code == 200:
             return response.json()
         else:
-            return f"Cannot fetch agents from the freshservice ${response.json()}"
+            return {"error": "Cannot fetch agents from the freshservice", "details": response.json()}
                       
 #GET AGENT FIELDS
 @mcp.tool()
@@ -2236,7 +2236,7 @@ async def get_agent_fields()-> Dict[str, Any]:
         if status_code == 200:
             return response.json()
         else:
-            return f"Cannot fetch agents from the freshservice ${response.json()}"
+            return {"error": "Cannot fetch agents from the freshservice", "details": response.json()}
         
 #GET ALL AGENT GROUPS
 @mcp.tool()
@@ -2251,7 +2251,7 @@ async def get_all_agent_groups()-> Dict[str, Any]:
         if status_code == 200:
             return response.json()
         else:
-            return f"Cannot fetch agents from the freshservice ${response.json()}"
+            return {"error": "Cannot fetch agents from the freshservice", "details": response.json()}
         
 #GET AGENT GROUP BY ID
 @mcp.tool()
@@ -2266,7 +2266,7 @@ async def getAgentGroupById(group_id:int)-> Dict[str, Any]:
         if status_code == 200:
             return response.json()
         else:
-            return f"Cannot fetch agents from the freshservice ${response.json()}"
+            return {"error": "Cannot fetch agents from the freshservice", "details": response.json()}
         
 #ADD REQUESTER TO GROUP
 @mcp.tool()
@@ -2415,7 +2415,7 @@ async def get_requester_groups_by_id(requester_group_id:int)-> Dict[str, Any]:
         if status_code == 200:
             return response.json()
         else:
-            return f"Cannot fetch requester group from the freshservice ${response.json()}"
+            return {"error": "Cannot fetch requester group from the freshservice", "details": response.json()}
         
 #CREATE REQUESTER GROUP
 @mcp.tool()
