@@ -229,9 +229,16 @@ async def create_ticket(
     status: Union[int, str],
     email: Optional[str] = None,
     requester_id: Optional[int] = None,
-    custom_fields: Optional[Dict[str, Any]] = None
+    custom_fields: Optional[Dict[str, Any]] = None,
+    group_id: Optional[Union[int, str]] = None,
+    responder_id: Optional[Union[int, str]] = None
 ) -> str:
-    """Create a ticket in Freshservice."""
+    """Create a ticket in Freshservice.
+
+    group_id and responder_id are optional here and required by some
+    ticket forms. Pass the agent group id and the assigned agent id when
+    the form rejects a create with missing_field for those names.
+    """
     
     if not email and not requester_id:
         return "Error: Either email or requester_id must be provided"
@@ -248,6 +255,23 @@ async def create_ticket(
         status_val not in [e.value for e in TicketStatus]):
         return "Error: Invalid value for source, priority, or status"
 
+    def positive_id(value, field):
+        if value is None or value == "":
+            return None
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return field
+        if parsed <= 0:
+            return field
+        return parsed
+
+    group_val = positive_id(group_id, "group_id")
+    responder_val = positive_id(responder_id, "responder_id")
+    if group_val in ("group_id", "responder_id") or responder_val in ("group_id", "responder_id"):
+        bad = [name for name, val in (("group_id", group_val), ("responder_id", responder_val)) if val in ("group_id", "responder_id")]
+        return f"Error: Invalid value for {', '.join(bad)}"
+
     data = {
         "subject": subject,
         "description": description,
@@ -260,6 +284,10 @@ async def create_ticket(
         data["email"] = email
     if requester_id:
         data["requester_id"] = requester_id
+    if group_val is not None:
+        data["group_id"] = group_val
+    if responder_val is not None:
+        data["responder_id"] = responder_val
 
     if custom_fields:
         data["custom_fields"] = custom_fields
